@@ -134,9 +134,9 @@ def _to_xlsx(cases: list[TestCase], path: Path) -> None:
         from openpyxl.drawing.image import Image as XLImage
 
         for i, c in enumerate(cases, start=2):
-            path = c.screenshot_path or c.screenshot_file or ""
+            img_path = c.screenshot_path or c.screenshot_file or ""
             cell = ws.cell(row=i, column=shot_col)
-            if not path or not Path(path).exists():
+            if not img_path or not Path(img_path).exists():
                 cell.value = c.screenshot_path or "-"
                 continue
             try:
@@ -145,7 +145,7 @@ def _to_xlsx(cases: list[TestCase], path: Path) -> None:
                 from PIL import Image as PILImage
 
                 buf = BytesIO()
-                with PILImage.open(str(Path(path).resolve())) as _pi:
+                with PILImage.open(str(Path(img_path).resolve())) as _pi:
                     _pi.convert("RGB").save(buf, format="PNG")
                 buf.seek(0)
                 img = XLImage(buf)
