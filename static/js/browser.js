@@ -120,6 +120,20 @@ function scheduleAutoSave(delay = 800) {
   }, delay);
 }
 
+$("#btn-load-project").addEventListener("click", () => loadProject());
+$("#btn-del-project").addEventListener("click", async () => {
+  if (!state.projectId) return toast("请先选择项目", "err");
+  if (!confirm("确认删除该项目及其本地数据？")) return;
+  try {
+    await api(`/api/projects/${state.projectId}`, { method: "DELETE" });
+    state.projectId = "";
+    localStorage.removeItem("qts_project_id");
+    await loadProjectList();
+    toast("项目已删除", "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
 
 async function loadProject() {
   if (!state.projectId) return toast("未选项目", "err");
