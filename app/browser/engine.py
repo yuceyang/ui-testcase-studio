@@ -293,15 +293,16 @@ class BrowserEngine:
         return self._call(_inner)
 
     def live_navigate(self, url: str) -> dict:
+        from urllib.parse import urljoin
+
         target = (url or "").strip()
         if not target:
             raise BrowserError("URL 为空")
         if not target.startswith("http"):
-            # 允许纯路径或 host
             if target.startswith("/"):
                 def _rel() -> dict:
                     page = self._require_page()
-                    page.goto(page.url.split("#")[0] + target, wait_until="domcontentloaded")
+                    page.goto(urljoin(page.url, target), wait_until="domcontentloaded")
                     return {"url": page.url, "title": page.title()}
                 return self._call(_rel, timeout=60)
             target = "https://" + target
@@ -433,7 +434,7 @@ class BrowserEngine:
             all_elements: list[dict] = []
             frame_tree: list[dict] = []
 
-            def walk(frame, path: str):
+            def walk(frame, path: str, ox: int = 0, oy: int = 0):
                 nonlocal main_raw
                 try:
                     raw = frame.evaluate(EXTRACT_JS)
@@ -442,6 +443,14 @@ class BrowserEngine:
                 if path == "main" and raw:
                     main_raw = raw
                 els = parse_extract(raw, frame_path=path, page_url=frame.url or "")
+                # 子 frame 元素换算到顶层视口，保证镜像/截图叠框对齐
+                if ox or oy:
+                    for e in els:
+                        b = e.get("bbox") or {}
+                        if b:
+                            b["x"] = b.get("x", 0) + ox
+                            b["y"] = b.get("y", 0) + oy
+                            e["bbox"] = b
                 all_elements.extend(els)
                 node = {
                     "path": path,
@@ -452,7 +461,17 @@ class BrowserEngine:
                 }
                 for i, child in enumerate(frame.child_frames):
                     cname = child.name or f"iframe[{i}]"
-                    node["children"].append(walk(child, f"{path}>{cname}"))
+                    cx, cy = ox, oy
+                    try:
+                        handle = child.frame_element()
+                        pos = handle.evaluate(
+                            "el => { const r = el.getBoundingClientRect(); return {x:r.x, y:r.y}; }"
+                        )
+                        cx = ox + int(pos.get("x") or 0)
+                        cy = oy + int(pos.get("y") or 0)
+                    except Exception:
+                        pass
+                    node["children"].append(walk(child, f"{path}>{cname}", cx, cy))
                 return node
 
             frame_tree.append(walk(page.main_frame, "main"))

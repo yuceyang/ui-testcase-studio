@@ -129,9 +129,15 @@ async function goAddress() {
     await ensureBrowser();
     const r = await api("/api/browser/live/navigate", { method: "POST", body: { url } });
     $("#page-title").textContent = r.title || r.url || "";
+    // 换页后旧元素坐标失效，清空叠框，待重新发现
+    state.elements = [];
+    state.marked = state.marked.filter((m) => false); // 标记过期，需重新点选
+    renderElements();
+    await loadMarked();
+    drawGhost();
     await loadLiveMeta();
     await refreshLiveFrame();
-    toast("已导航，可手动登录", "ok");
+    toast("已导航，可手动登录；请重新「自动发现元素」", "ok");
     refreshStatus();
   } catch (e) {
     toast(e.message, "err");
