@@ -136,8 +136,11 @@ class ProjectStore:
         data["shots"] = engine.list_shots()
         if cases is not None:
             data["cases"] = cases
-        # 兜底：始终保留已有 cases 字段
+        # 兜底：始终保留已有 cases 字段（不在此处清空）
         data.setdefault("cases", [])
+        if cases is None:
+            # 保留磁盘上已有的用例
+            pass
         cur = engine.current()
         if cur.get("url"):
             data.setdefault("meta", {})

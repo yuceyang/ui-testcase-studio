@@ -16,6 +16,7 @@ const state = {
   liveReady: false,
   projectCases: [],
   committedCases: [],
+  casesReady: false,
   checkedIds: new Set(),
   collapsedIds: new Set(),
 };
@@ -96,9 +97,11 @@ async function saveProject(silent = false) {
     if (!silent) toast("请先新建/选择项目", "err");
     return;
   }
+  // 仅在「已加载或已生成/已删改用例」时写入 cases，避免空数组覆盖
+  const body = { cases: state.casesReady ? state.committedCases || [] : undefined };
   return api(`/api/projects/${state.projectId}/save-from-engine`, {
     method: "POST",
-    body: { cases: state.committedCases || [] },
+    body,
   })
     .then(async (r) => {
       const p = r.project || {};
@@ -188,6 +191,7 @@ async function loadProject() {
     state.shots = r.project.shots || [];
     state.projectCases = r.project.cases || [];
     state.committedCases = r.project.cases || [];
+    state.casesReady = true;
     window._lastCases = [];
     rebindCasesToTree();
     renderTree();
@@ -1726,6 +1730,7 @@ $("#btn-build-cases").addEventListener("click", async () => {
     state.sessionId = r.session_id;
     state.committedCases = r.cases || [];
     state.projectCases = state.committedCases;
+    state.casesReady = true;
     window._lastCases = [];
     if (state.projectId) {
       // 原子保存：cases + 树一起写
