@@ -355,7 +355,8 @@ function renderElements() {
       <td class="url">${esc(e.selector)}</td>
       <td class="url">${esc(e.frame_path || "main")}</td>
       <td>
-        <button class="link-btn" data-act="mark" data-id="${e.id}">标功能点</button>
+        <button class="link-btn" data-act="mark-as" data-id="${e.id}">标记为…</button>
+        <button class="link-btn" data-act="attach" data-id="${e.id}">挂到当前</button>
       </td>
     </tr>`
     )
@@ -373,7 +374,10 @@ function renderElements() {
     allCb.indeterminate = checkedN > 0 && checkedN < visible.length;
   }
 
-  tb.querySelectorAll("button[data-act=mark]").forEach((btn) => {
+  tb.querySelectorAll("button[data-act=mark-as]").forEach((btn) => {
+    btn.addEventListener("click", () => openMarkAs(btn.dataset.id));
+  });
+  tb.querySelectorAll("button[data-act=attach]").forEach((btn) => {
     btn.addEventListener("click", () => markElement(btn.dataset.id));
   });
   tb.querySelectorAll(".el-check").forEach((cb) => {
@@ -477,7 +481,7 @@ async function loadMarked() {
         </div>
       </div>`
       )
-      .join("") || `<div class="muted">尚未标记元素。点击中间表格「标功能点」。</div>`;
+      .join("") || `<div class="muted">尚未标记元素。在表格点「标记为…」可建模块/目录/功能点。</div>`;
 
     $("#marked-list").querySelectorAll("button[data-act=un]").forEach((b) => {
       b.addEventListener("click", () => unmarkElement(b.dataset.id));
@@ -540,16 +544,159 @@ function renderTree() {
 
   $("#tree").querySelectorAll(".tree-node").forEach((el) => {
     el.addEventListener("click", () => selectNode(el.dataset.id));
-    el.addEventListener("dblclick", async () => {
-      const n = state.tree.find((x) => x.id === el.dataset.id);
-      const name = prompt("节点名称", n.name);
-      if (name != null && name.trim()) {
-        await api(`/api/browser/tree/node/${n.id}`, { method: "PUT", body: { name: name.trim() } });
-        await loadTree();
-      }
+    el.addEventListener("dblclick", () => openNodeEditor(el.dataset.id));
+    // 右键 = 编辑/移动
+    el.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      openNodeEditor(el.dataset.id);
     });
   });
 }
+
+/* ===== 树节点：编辑 / 移动 ===== */
+function descendantsOf(id) {
+  const ids = new Set([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const n of state.tree) {
+      if (n.parent_id && ids.has(n.parent_id) && !ids.has(n.id)) {
+        ids.add(n.id);
+        changed = true;
+      }
+    }
+  }
+  return ids;
+}
+
+function fillParentOptions(sel, excludeId, selectedParent) {
+  const skip = excludeId ? descendantsOf(excludeId) : new Set();
+  const rows = state.tree.filter((n) => !skip.has(n.id));
+  sel.innerHTML =
+    `<option value="">（根 / 顶层）</option>` +
+    rows
+      .map(
+        (n) =>
+          `<option value="${n.id}" ${n.id === selectedParent ? "selected" : ""}>${"　".repeat(
+            Math.min(pathNames(n.id).split(" / ").length - 1, 6)
+          )}${esc(n.name)} · ${n.node_type}</option>`
+      )
+      .join("");
+}
+
+function openMarkAs(elId) {
+  const el = state.elements.find((x) => x.id === elId);
+  if (!el) return;
+  $("#mka-el-id").value = elId;
+  $("#mka-name").value = el.name || el.text || "";
+  const typeSel = $("#mka-type");
+  // 默认：有选中节点则挂其下作功能点；否则作模块
+  const cur = state.tree.find((n) => n.id === state.selectedNodeId);
+  typeSel.value = cur && cur.node_type !== "module" ? "point" : cur ? "title1" : "module";
+  fillParentOptions($("#mka-parent"), null, cur ? cur.id : "");
+  // 模块强制根
+  typeSel.onchange = () => {
+    if (typeSel.value === "module") {
+      $("#mka-parent").value = "";
+      $("#mka-parent").disabled = true;
+    } else {
+      $("#mka-parent").disabled = false;
+    }
+  };
+  typeSel.onchange();
+  $("#modal-mark-as").classList.remove("hidden");
+}
+
+function openNodeEditor(id) {
+  const n = state.tree.find((x) => x.id === id);
+  if (!n) return;
+  $("#mn-id").value = id;
+  $("#mn-name").value = n.name || "";
+  $("#mn-type").value = n.node_type || "point";
+  fillParentOptions($("#mn-parent"), id, n.parent_id || "");
+  if (n.node_type === "module") {
+    $("#mn-parent").value = "";
+    $("#mn-parent").disabled = true;
+    $("#mn-type").disabled = true;
+  } else {
+    $("#mn-parent").disabled = false;
+    $("#mn-type").disabled = false;
+  }
+  $("#modal-node").classList.remove("hidden");
+}
+
+$("#btn-close-mark-as").addEventListener("click", () => $("#modal-mark-as").classList.add("hidden"));
+$("#btn-close-node").addEventListener("click", () => $("#modal-node").classList.add("hidden"));
+
+$("#btn-save-mark-as").addEventListener("click", async () => {
+  const elId = $("#mka-el-id").value;
+  const el = state.elements.find((x) => x.id === elId);
+  const node_type = $("#mka-type").value;
+  const name = ($("#mka-name").value || el?.name || el?.text || "节点").trim();
+  const parent_id = node_type === "module" ? "" : $("#mka-parent").value;
+  try {
+    // 先确保元素已标记
+    let marked = state.marked.find((m) => m.id === elId) || el;
+    if (el && !el.marked) {
+      const r = await api("/api/browser/mark", { method: "POST", body: { element: el } });
+      marked = r.element;
+      const idx = state.elements.findIndex((x) => x.id === elId);
+      if (idx >= 0) state.elements[idx] = { ...state.elements[idx], ...marked, marked: true };
+      await loadMarked();
+    }
+    const r = await api("/api/browser/tree/node", {
+      method: "POST",
+      body: {
+        name,
+        node_type,
+        parent_id: parent_id || null,
+        url: el?.page_url || el?.url || "",
+        element_ids: marked?.id ? [marked.id] : [],
+      },
+    });
+    $("#modal-mark-as").classList.add("hidden");
+    await loadTree();
+    selectNode(r.node.id);
+    drawGhost();
+    toast(`已标为「${node_type}」：${name}`, "ok");
+    renderElements();
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
+
+$("#btn-save-node").addEventListener("click", async () => {
+  const id = $("#mn-id").value;
+  const node_type = $("#mn-type").value;
+  const payload = {
+    name: $("#mn-name").value.trim(),
+    node_type,
+    parent_id: node_type === "module" ? null : $("#mn-parent").value || null,
+  };
+  try {
+    await api(`/api/browser/tree/node/${id}`, { method: "PUT", body: payload });
+    $("#modal-node").classList.add("hidden");
+    await loadTree();
+    selectNode(id);
+    toast("节点已更新", "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
+
+$("#btn-del-node").addEventListener("click", async () => {
+  const id = $("#mn-id").value;
+  if (!confirm("删除该节点及其子节点？")) return;
+  try {
+    await api(`/api/browser/tree/node/${id}`, { method: "DELETE" });
+    $("#modal-node").classList.add("hidden");
+    state.selectedNodeId = null;
+    await loadTree();
+    toast("已删除", "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
 
 async function loadTree() {
   try {
