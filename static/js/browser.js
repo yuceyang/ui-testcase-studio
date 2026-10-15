@@ -1268,13 +1268,97 @@ $("#btn-shot").addEventListener("click", async () => {
 
 /* ================= 用例 ================= */
 function renderPreview(r) {
+  const list = r.cases || [];
   const titles = r.titles || [];
+  window._lastCases = list;
+  if (!titles.length && !list.length) {
+    $("#case-preview").innerHTML = "暂无用例";
+    return;
+  }
   $("#case-preview").innerHTML =
-    titles
-      .map((t) => `<div class="t"><b>${esc(t.title)}</b><br><span class="muted">${esc(t.module)} · ${t.priority}</span></div>`)
-      .join("") || "暂无用例";
+    (list.length
+      ? list
+      : titles.map((t) => ({ title: t.title, module: t.module, priority: t.priority, case_no: "" }))
+    )
+      .map(
+        (c, i) => `
+      <div class="t case-item" data-i="${i}" style="cursor:pointer">
+        <b>${esc(c.case_no ? c.case_no + " " : "")}${esc(c.title)}</b><br>
+        <span class="muted">${esc(c.module_cat || c.module || "")} / ${esc(c.title_l1 || "")} / ${esc(c.title_l2 || "")} · ${c.priority || ""} · ${esc(c.case_status || "")}</span>
+      </div>`
+      )
+      .join("");
+  $("#case-preview").querySelectorAll(".case-item").forEach((el) => {
+    el.addEventListener("click", () => openCaseDetail(Number(el.dataset.i)));
+  });
 }
 
+function openCaseDetail(i) {
+  const c = (window._lastCases || [])[i];
+  if (!c) return;
+  $("#cd-id").value = c.id || "";
+  $("#cd-no").value = c.case_no || "";
+  $("#cd-status").value = c.case_status || "未执行";
+  $("#cd-sys").value = c.sys_name || "";
+  $("#cd-mod").value = c.module_cat || c.module || "";
+  $("#cd-l1").value = c.title_l1 || "/";
+  $("#cd-l2").value = c.title_l2 || "/";
+  $("#cd-title").value = c.title || "";
+  $("#cd-design").value = c.design_req || "";
+  $("#cd-track").value = c.test_track || "";
+  $("#cd-pre").value = c.preconditions || "";
+  $("#cd-steps").value = c.steps || "";
+  $("#cd-exp").value = c.expected || "";
+  $("#cd-method").value = c.method || "GET";
+  $("#cd-url").value = c.url || "";
+  $("#cd-params").value = c.params || c.data || "-";
+  $("#cd-remark").value = c.remark || "";
+  const sp = c.screenshot_path || "";
+  $("#cd-shot-path").textContent = sp ? "截图：" + sp : "截图：—";
+  const img = $("#cd-shot");
+  if (sp && (c.screenshot_file || sp)) {
+    const fname = (c.screenshot_file || sp.split(/[\\/]/).pop() || "");
+    img.src = `/api/browser/shot-file/${encodeURIComponent(fname)}`;
+    img.style.display = "block";
+    img.onerror = () => (img.style.display = "none");
+  } else {
+    img.style.display = "none";
+  }
+  $("#modal-case").classList.remove("hidden");
+}
+
+$("#btn-close-case") &&
+  $("#btn-close-case").addEventListener("click", () => $("#modal-case").classList.add("hidden"));
+$("#btn-save-case") &&
+  $("#btn-save-case").addEventListener("click", () => {
+    const i = (window._lastCases || []).findIndex((x) => x.id === $("#cd-id").value);
+    if (i < 0) return;
+    const c = window._lastCases[i];
+    Object.assign(c, {
+      case_no: $("#cd-no").value,
+      case_status: $("#cd-status").value,
+      sys_name: $("#cd-sys").value,
+      module_cat: $("#cd-mod").value,
+      title_l1: $("#cd-l1").value,
+      title_l2: $("#cd-l2").value,
+      title: $("#cd-title").value,
+      design_req: $("#cd-design").value,
+      test_track: $("#cd-track").value,
+      preconditions: $("#cd-pre").value,
+      steps: $("#cd-steps").value,
+      expected: $("#cd-exp").value,
+      method: $("#cd-method").value,
+      url: $("#cd-url").value,
+      params: $("#cd-params").value,
+      remark: $("#cd-remark").value,
+      human_modified: true,
+    });
+    renderPreview({ cases: window._lastCases });
+    $("#modal-case").classList.add("hidden");
+    toast("用例已更新（导出前请再点「生成入库」或直接导出当前会话）");
+  });
+
+/* 用例操作 */
 $("#btn-preview").addEventListener("click", async () => {
   try {
     const r = await api("/api/browser/tree/preview-cases", {
@@ -1291,12 +1375,10 @@ $("#btn-build-cases").addEventListener("click", async () => {
   try {
     const r = await api("/api/browser/cases/from-tree", {
       method: "POST",
-      body: { extra: { include_negative: true, include_auth_cases: true } },
+      body: { extra: { include_negative: true, include_auth_cases: true }, sys_name: "" },
     });
     state.sessionId = r.session_id;
-    renderPreview({
-      titles: r.cases.map((c) => ({ title: c.title, module: c.module, priority: c.priority })),
-    });
+    renderPreview({ cases: r.cases });
     toast(`已生成 ${r.count} 条`, "ok");
   } catch (e) {
     toast(e.message, "err");
@@ -1318,6 +1400,39 @@ $("#btn-export").addEventListener("click", async () => {
   }
 });
 $("#btn-go-cases").addEventListener("click", () => $("#btn-build-cases").click());
+
+/* 折叠 */
+function initCollapsible() {
+  $$(".collapse-toggle, .col-head.collapsible").forEach((el) => {
+    el.addEventListener("click", (ev) => {
+      if (ev.target.closest("button") && !ev.target.classList.contains("collapse-toggle")) {
+        // 标题栏内其它按钮不折叠
+        if (!ev.target.classList.contains("collapse-toggle")) return;
+      }
+      const id = el.dataset.collapse;
+      if (!id) return;
+      const body = document.getElementById(id);
+      if (!body) return;
+      const on = body.classList.toggle("collapsed");
+      $$(`[data-collapse="${id}"]`).forEach((b) => {
+        if (b.classList.contains("collapse-toggle")) b.textContent = on ? "展开" : "折叠";
+      });
+    });
+  });
+}
+
+/* init */
+refreshStatus();
+loadProjectList();
+loadMarked();
+loadTree();
+loadShotList();
+startLive();
+loadLiveMeta();
+initSplitters();
+initPopout();
+initZoom();
+initCollapsible();
 
 /* ================= 配置 ================= */
 $("#btn-config").addEventListener("click", async () => {

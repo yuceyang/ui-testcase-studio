@@ -302,7 +302,9 @@ def preview_cases(payload: dict | None = None):
     payload = payload or {}
     e = ExtraRequirement(**payload)
     sys_name = payload.get("sys_name") or _default_sys_name()
-    cases = build_cases_from_tree(tree, eng.list_marked(), e, sys_name=sys_name)
+    cases = build_cases_from_tree(
+        tree, eng.list_marked(), e, sys_name=sys_name, shots=eng.list_shots()
+    )
     return {
         "ok": True,
         "count": len(cases),
@@ -420,7 +422,9 @@ def cases_from_tree(payload: dict):
     extra = ExtraRequirement(**(payload.get("extra") or {}))
     sid = payload.get("session_id") or ("ui_" + datetime.now().strftime("%H%M%S"))
     sys_name = payload.get("sys_name") or _default_sys_name()
-    cases = build_cases_from_tree(tree, eng.list_marked(), extra, sys_name=sys_name)
+    cases = build_cases_from_tree(
+        tree, eng.list_marked(), extra, sys_name=sys_name, shots=eng.list_shots()
+    )
 
     if not store.get(sid):
         store.create(sid, base_url=eng.current().get("url", ""))

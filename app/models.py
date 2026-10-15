@@ -89,6 +89,10 @@ class TestCase(BaseModel):
     test_track: str = ""
     stop_cond: str = "功能验证完成或出现阻断缺陷即终止"
     remark: str = "-"
+    params: str = "-"
+    screenshot_path: str = ""
+    screenshot_file: str = ""
+    case_status: str = "未执行"
 
 
 class GenerateResult(BaseModel):

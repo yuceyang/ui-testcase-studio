@@ -219,7 +219,19 @@
   overflow: auto;
 }
 
-/* 拖动条 */
+/* 折叠 */
+.col-head.collapsible { cursor: pointer; user-select: none; }
+.collapse-body.grow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.collapse-body.collapsed { display: none !important; }
+.collapse-toggle { flex-shrink: 0; }
+.col-head.collapsed-badge::after {
+  content: "";
+}
 .splitter {
   background: transparent;
   position: relative;

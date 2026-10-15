@@ -35,6 +35,11 @@ V3_HEADERS = [
     "审核人",
     "审核时间",
     "备注",
+    "请求方式",
+    "URL",
+    "携带参数",
+    "执行状态",
+    "截图路径",
 ]
 
 
@@ -64,6 +69,11 @@ def _row(c: TestCase) -> list[str]:
         "-",
         "-",
         _cell(c.remark or (f"P{c.priority[-1]};{c.category}")),
+        _cell(c.method or "GET"),
+        _cell(c.url),
+        _cell(c.params),
+        _cell(c.case_status or "未执行"),
+        _cell(c.screenshot_path),
     ]
 
 
@@ -109,6 +119,30 @@ def _to_xlsx(cases: list[TestCase], path: Path) -> None:
 
     for c in cases:
         ws.append(_row(c))
+
+    # 截图嵌入（最后一列后追加图片）
+    try:
+        from openpyxl.drawing.image import Image as XLImage
+        from PIL import Image as PILImage  # noqa: F401
+        import io
+
+        for i, c in enumerate(cases, start=2):
+            path = c.screenshot_path or ""
+            if not path or not Path(path).exists():
+                continue
+            # 限制大图，避免 xlsx 过大
+            img = XLImage(path)
+            scale = 320 / (img.width or 1)
+            if scale < 1:
+                img.width = int(img.width * scale)
+                img.height = int(img.height * scale)
+            # 放在备注右侧“截图”列后空白区
+            col = len(V3_HEADERS) + 1
+            anchor = f"{get_column_letter(col)}{i}"
+            ws.add_image(img, anchor)
+            ws.column_dimensions[get_column_letter(col)].width = 36
+    except Exception:
+        pass
 
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=len(V3_HEADERS)):
         for cell in row:

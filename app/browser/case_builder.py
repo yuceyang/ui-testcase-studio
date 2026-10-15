@@ -24,33 +24,43 @@ def _chain(node_id: str, tree: list[dict]) -> list[dict]:
 def _fields_for(node: dict, tree: list[dict], sys_name: str) -> dict:
     """
     映射：系统名字 / 模块分类 / 一级标题 / 二级标题
-    更深目录并入「二级标题」路径（或设计需求），满足 v3 两列上限。
+    路径用「-」连接且过滤空段，避免出现一串 /
+    更深目录并入二级标题。
     """
     chain = _chain(node["id"], tree)
     by_type = {}
-    dirs = []  # 目录节点（title*）
+    dirs = []
     point_name = node.get("name") or "功能点"
     for n in chain:
         nt = n.get("node_type")
         nm = (n.get("name") or "").strip()
+        if nm == "/":
+            nm = ""
         if nt == "module":
             by_type["module"] = nm or "模块"
         elif nt.startswith("title"):
-            dirs.append(nm or "/")
+            if nm:
+                dirs.append(nm)
         elif nt in ("point", "case"):
             point_name = nm or point_name
 
     module_cat = by_type.get("module") or sys_name or "模块"
     l1 = dirs[0] if dirs else "/"
     if len(dirs) >= 2:
-        l2 = dirs[1]
+        l2 = "-".join(dirs[1:])
     else:
         l2 = "/"
-    # 更深目录：写入二级标题扩展，用 - 串联
-    if len(dirs) > 2:
-        l2 = "-".join(dirs[1:]) if dirs[1] else "/"
 
     track = f"{module_cat}-{l1}" if l1 != "/" else f"{module_cat}-{point_name}"
+    # 展示路径：模块-一级-二级-功能点（去掉空段）
+    parts = [module_cat]
+    if l1 and l1 != "/":
+        parts.append(l1)
+    if l2 and l2 != "/":
+        parts.append(l2)
+    parts.append(point_name)
+    deep_path = "-".join(parts)
+
     return {
         "sys_name": sys_name,
         "module_cat": module_cat,
@@ -59,7 +69,7 @@ def _fields_for(node: dict, tree: list[dict], sys_name: str) -> dict:
         "point_name": point_name,
         "design_req": f"支持通过界面操作对「{point_name}」进行查询/展示验证",
         "test_track": track,
-        "deep_path": " / ".join([x for x in (module_cat, l1, l2, point_name) if x]),
+        "deep_path": deep_path,
     }
 
 
@@ -111,18 +121,30 @@ def build_cases_from_tree(
     extra: ExtraRequirement,
     sys_name: str = "",
     start_no: int = 1,
+    shots: list[dict] | None = None,
 ) -> list[TestCase]:
-    """按功能测试提示词 v3.0 生成；支持多级目录，更深层级并入二级标题。"""
+    """按功能测试提示词 v3.0 生成；支持多级目录，路径用 - 连接。"""
     cases: list[TestCase] = []
     el_by_id = {e.get("id"): e for e in marked_elements}
     seq = start_no
     sys_name = sys_name or "被测系统"
+    shots = shots or []
+    shot_by_id = {s.get("id"): s for s in shots}
 
     def next_no() -> str:
         nonlocal seq
         n = f"GN-{seq:04d}"
         seq += 1
         return n
+
+    def shot_for(node: dict) -> tuple[str, str]:
+        sid = node.get("screenshot_id") or ""
+        s = shot_by_id.get(sid)
+        if not s and shots:
+            s = shots[-1]
+        if not s:
+            return "", ""
+        return s.get("path") or "", s.get("file") or ""
 
     for node in tree:
         if node.get("node_type") not in ("point", "case"):
@@ -223,5 +245,12 @@ def build_cases_from_tree(
                     url=url,
                 )
             )
+
+    # 挂截图：节点专用或最近一张
+    node_by_id = {n.get("id"): n for n in tree}
+    for c in cases:
+        sp, sf = shot_for(node_by_id.get(c.point_id) or {})
+        c.screenshot_path = sp
+        c.screenshot_file = sf
 
     return cases
