@@ -136,6 +136,25 @@ $("#btn-del-project").addEventListener("click", async () => {
   }
 });
 
+function rebindCasesToTree() {
+  const treeIds = new Set(state.tree.map((n) => n.id));
+  const points = state.tree.filter((n) => n.node_type === "point" || n.node_type === "case");
+  const orphans = [];
+  for (const c of state.committedCases || []) {
+    if (c.point_id && treeIds.has(c.point_id)) continue;
+    let hit = points.find((p) => p.name && (c.title || "").includes(p.name));
+    if (!hit && c.module_cat) {
+      hit = state.tree.find((n) => n.node_type === "module" && n.name === c.module_cat);
+    }
+    if (hit) c.point_id = hit.id;
+    else orphans.push(c);
+  }
+  if (orphans.length && state.tree.length) {
+    const root = state.tree.find((n) => n.node_type === "point") || state.tree[0];
+    for (const c of orphans) c.point_id = root.id;
+  }
+}
+
 async function loadProject() {
   if (!state.projectId) return toast("未选项目", "err");
   try {
@@ -149,12 +168,13 @@ async function loadProject() {
     state.projectCases = r.project.cases || [];
     state.committedCases = r.project.cases || [];
     window._lastCases = [];
+    rebindCasesToTree();
     renderTree();
     await loadMarked();
     $("#case-preview").innerHTML =
-      `<div class="muted">项目已加载：已入库 ${state.committedCases.length} 条（见功能点树）。生成台仅显示未入库预览。</div>`;
+      `<div class="muted">项目已加载：已入库 ${state.committedCases.length} 条（见功能点树）。</div>`;
     await loadShotList();
-    toast(`已加载 ${r.project.name}（用例 ${state.committedCases.length} · 恢复登录:${r.restored_login ? "是" : "否"}）`, "ok");
+    toast(`已加载 ${r.project.name}（用例 ${state.committedCases.length}）`, "ok");
   } catch (e) {
     toast(e.message, "err");
   }

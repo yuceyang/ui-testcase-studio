@@ -867,3 +867,6 @@
 
 .twist { width: 12px; text-align: center; cursor: pointer; color: var(--muted); user-select: none; flex-shrink: 0; }
 .twist.empty { cursor: default; opacity: .35; }
+
+.tree { line-height: 1.35; padding: 4px 8px; }
+.tree-node { padding: 2px 6px; }
