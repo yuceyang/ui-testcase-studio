@@ -26,126 +26,129 @@
     </div>
   </header>
 
-  <main class="workspace layout-3">
-    <!-- 左：树 + 交互元素 -->
-    <aside class="col left-col">
-      <div class="col-head">
-        <b>功能点树</b>
-        <div>
-          <button id="btn-add-module" class="mini">+模块</button>
-          <button id="btn-add-title" class="mini">+目录</button>
-          <button id="btn-add-point" class="mini">+功能点</button>
+  <main class="workspace layout-2">
+    <!-- 左列：上=树，下=判定/截图/已标/用例 -->
+    <div class="col-stack left-stack">
+      <section class="col tree-panel">
+        <div class="col-head">
+          <b>功能点树</b>
+          <div>
+            <button id="btn-add-module" class="mini">+模块</button>
+            <button id="btn-add-title" class="mini">+目录</button>
+            <button id="btn-add-point" class="mini">+功能点</button>
+          </div>
         </div>
-      </div>
-      <div class="hint-line">模块 → 一/二/三级 → 功能点（缺级 <b>/</b>）· 双击编辑</div>
-      <div id="tree" class="tree"></div>
+        <div class="hint-line">模块 → 一/二/三级 → 功能点（缺级 <b>/</b>）· 双击编辑</div>
+        <div id="tree" class="tree"></div>
+      </section>
 
-      <div class="col-head">
-        <b>交互元素</b>
-        <div>
-          <button class="mini" id="btn-sel-all">全选</button>
-          <button class="mini" id="btn-sel-none">全不选</button>
-          <button class="mini primary" id="btn-mark-selected">挂到当前节点</button>
+      <section class="col side-panel">
+        <div class="col-head"><b>判定</b><span class="muted" id="sel-node-info">未选节点</span></div>
+        <div class="status-box">
+          <textarea id="node-annotation" rows="2" placeholder="问题标注"></textarea>
+          <div class="actions">
+            <button class="btn pass" id="btn-pass">通过</button>
+            <button class="btn fail" id="btn-fail">不通过</button>
+            <button class="btn" id="btn-pending">待定</button>
+            <button class="btn ghost" id="btn-ignore">忽略</button>
+          </div>
         </div>
-      </div>
-      <div class="filters tight">
-        <input id="el-filter" placeholder="过滤名称/selector…" />
-        <select id="el-kind">
-          <option value="">全部类型</option>
-          <option value="button">按钮</option>
-          <option value="input">输入框</option>
-          <option value="select">下拉框</option>
-          <option value="link">链接</option>
-        </select>
-      </div>
-      <div class="table-wrap el-table-wrap">
-        <table class="table" id="el-table">
-          <thead>
-            <tr>
-              <th width="36"><input type="checkbox" id="el-select-all" title="全选" /></th>
-              <th width="56">类型</th>
-              <th>名称</th>
-              <th>selector</th>
-              <th width="88">操作</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </aside>
 
-    <!-- 中：浏览器 -->
-    <section class="col center-col browser-col">
-      <div class="browser-chrome">
-        <button id="btn-back" class="chrome-btn" title="后退">←</button>
-        <button id="btn-reload" class="chrome-btn" title="刷新">⟳</button>
-        <input id="addr-url" class="chrome-url" spellcheck="false"
-               placeholder="https://目标系统，镜像内点击登录（支持中文输入/粘贴）" />
-        <button id="btn-go" class="chrome-go">前往</button>
-      </div>
-      <div class="live-wrap">
-        <div class="live-stage" id="live-stage" tabindex="0">
-          <div class="live-empty" id="live-empty">
-            <div class="empty-box">
-              <div class="empty-icon">⌘</div>
-              <div>等待启动浏览器</div>
-              <div class="muted">启动后输入网址，在镜像内点击、输入、粘贴、登录</div>
+        <div class="col-head"><b>标记</b></div>
+        <div class="status-box">
+          <button class="btn" id="btn-clear-marks" style="width:100%">一键取消本页标记</button>
+          <div class="muted" style="margin-top:6px">Ctrl+点识别框切换 · 右键取消/标记为…</div>
+        </div>
+
+        <div class="col-head"><b>截图库</b>
+          <div>
+            <label class="switch"><input type="checkbox" id="auto-shot" checked /> 自动</label>
+            <button class="mini" id="btn-shot">手动</button>
+          </div>
+        </div>
+        <div class="shot-dir muted" id="shot-dir">存储目录：—</div>
+        <div id="shot-list" class="shot-list"></div>
+
+        <div class="col-head"><b>已标功能点</b><span class="muted" id="marked-count">0</span></div>
+        <div id="marked-list" class="marked-list"></div>
+
+        <div class="col-head"><b>设置 / 树用例</b>
+          <span class="muted">仅树上功能点</span>
+        </div>
+        <div class="actions" style="padding:0 10px">
+          <button class="mini" id="btn-preview">预览</button>
+          <button class="mini primary" id="btn-build-cases">生成入库</button>
+          <button class="mini" id="btn-export">导出Excel</button>
+        </div>
+        <div id="case-preview" class="case-preview muted">模块-一-二-三-功能点-XX功能点测试/验证</div>
+      </section>
+    </div>
+
+    <!-- 右列：上=浏览器，下=交互元素 -->
+    <div class="col-stack right-stack">
+      <section class="col browser-col">
+        <div class="browser-chrome">
+          <button id="btn-back" class="chrome-btn" title="后退">←</button>
+          <button id="btn-reload" class="chrome-btn" title="刷新">⟳</button>
+          <input id="addr-url" class="chrome-url" spellcheck="false"
+                 placeholder="https://目标系统，镜像内点击登录（支持中文输入/粘贴）" />
+          <button id="btn-go" class="chrome-go">前往</button>
+        </div>
+        <div class="live-wrap">
+          <div class="live-stage" id="live-stage" tabindex="0">
+            <div class="live-empty" id="live-empty">
+              <div class="empty-box">
+                <div class="empty-icon">⌘</div>
+                <div>等待启动浏览器</div>
+                <div class="muted">启动后输入网址，在镜像内点击、输入、粘贴、登录</div>
+              </div>
             </div>
+            <div class="live-frame hidden" id="live-frame">
+              <img id="live-img" alt="实时页面" draggable="false" />
+            </div>
+            <input id="ime-proxy" class="ime-proxy" autocomplete="off" spellcheck="false" />
+            <div id="live-cross"></div>
+            <div id="ctx-menu" class="ctx-menu hidden"></div>
           </div>
-          <div class="live-frame hidden" id="live-frame">
-            <img id="live-img" alt="实时页面" draggable="false" />
+          <div class="live-hint muted">
+            左键点击页面 · Ctrl+点击识别框切换标记 · 右键识别框取消/标记 · Ctrl+V 粘贴
           </div>
-          <input id="ime-proxy" class="ime-proxy" autocomplete="off" spellcheck="false" />
-          <div id="live-cross"></div>
-          <div id="ctx-menu" class="ctx-menu hidden"></div>
         </div>
-        <div class="live-hint muted">
-          左键点击页面 · Ctrl+点击识别框切换标记 · 右键识别框取消/标记 · 右键空白添加节点 · Ctrl+V 粘贴
+      </section>
+
+      <section class="col elements-panel">
+        <div class="col-head">
+          <b>交互元素</b>
+          <div>
+            <input id="el-filter" placeholder="过滤名称/selector…" style="width:160px" />
+            <select id="el-kind" style="width:100px">
+              <option value="">全部类型</option>
+              <option value="button">按钮</option>
+              <option value="input">输入框</option>
+              <option value="select">下拉框</option>
+              <option value="link">链接</option>
+            </select>
+            <button class="mini" id="btn-sel-all">全选</button>
+            <button class="mini" id="btn-sel-none">全不选</button>
+            <button class="mini primary" id="btn-mark-selected">挂到当前节点</button>
+          </div>
         </div>
-      </div>
-    </section>
-
-    <!-- 右：判定/截图/用例 -->
-    <aside class="col right-col">
-      <div class="col-head"><b>判定</b><span class="muted" id="sel-node-info">未选节点</span></div>
-      <div class="status-box">
-        <textarea id="node-annotation" rows="2" placeholder="问题标注"></textarea>
-        <div class="actions">
-          <button class="btn pass" id="btn-pass">通过</button>
-          <button class="btn fail" id="btn-fail">不通过</button>
-          <button class="btn" id="btn-pending">待定</button>
-          <button class="btn ghost" id="btn-ignore">忽略</button>
+        <div class="table-wrap el-table-wrap">
+          <table class="table" id="el-table">
+            <thead>
+              <tr>
+                <th width="40"><input type="checkbox" id="el-select-all" title="全选" /></th>
+                <th width="64">类型</th>
+                <th>名称</th>
+                <th>selector</th>
+                <th width="110">操作</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
-      </div>
-
-      <div class="col-head"><b>标记</b></div>
-      <div class="status-box">
-        <button class="btn" id="btn-clear-marks" style="width:100%">一键取消本页标记</button>
-        <div class="muted" style="margin-top:6px">已入树元素不会再自动列出；需要时手动「标记为…」</div>
-      </div>
-
-      <div class="col-head"><b>截图库</b>
-        <div>
-          <label class="switch"><input type="checkbox" id="auto-shot" checked /> 自动</label>
-          <button class="mini" id="btn-shot">手动</button>
-        </div>
-      </div>
-      <div class="shot-dir muted" id="shot-dir">存储目录：—</div>
-      <div id="shot-list" class="shot-list"></div>
-
-      <div class="col-head"><b>已标功能点</b><span class="muted" id="marked-count">0</span></div>
-      <div id="marked-list" class="marked-list"></div>
-
-      <div class="col-head"><b>树用例</b>
-        <span class="muted">仅来自树上功能点</span>
-      </div>
-      <div class="actions" style="padding:0 10px">
-        <button class="mini" id="btn-preview">预览</button>
-        <button class="mini primary" id="btn-build-cases">生成入库</button>
-        <button class="mini" id="btn-export">导出Excel</button>
-      </div>
-      <div id="case-preview" class="case-preview muted">模块-一-二-三-功能点-XX功能点测试/验证</div>
-    </aside>
+      </section>
+    </div>
   </main>
 
   <!-- 大图详情 -->
