@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>软件功能测试系统 · 内置浏览器功能点</title>
+  <title>软件功能测试系统 · 查询用例生成</title>
   <link rel="stylesheet" href="/static/css/app.css" />
   <link rel="stylesheet" href="/static/css/browser.css" />
 </head>
@@ -13,14 +13,12 @@
       <span class="logo">QT</span>
       <div>
         <h1>软件功能测试系统</h1>
-        <p class="sub">内置浏览器 · 地址栏导航 · 镜像内手动登录 · 功能点树 · 只读用例</p>
+        <p class="sub">功能点树 · 内置浏览器手动操作 · 只读查询用例</p>
       </div>
     </div>
     <div class="top-actions">
-      <label class="switch"><input type="checkbox" id="auto-shot" checked /> 自动截图</label>
-      <button id="btn-shot" class="btn">手动截图</button>
-      <button id="btn-config" class="btn ghost">模型配置</button>
       <span id="br-status" class="badge">浏览器未启动</span>
+      <button id="btn-config" class="btn ghost">模型配置</button>
     </div>
   </header>
 
@@ -28,7 +26,7 @@
     <div class="addr-group">
       <button id="btn-back" class="btn" title="后退">←</button>
       <button id="btn-reload" class="btn" title="刷新">⟳</button>
-      <input id="addr-url" type="text" placeholder="https://目标系统地址，手动登录" spellcheck="false" />
+      <input id="addr-url" type="text" placeholder="https://目标系统地址，在视图内手动登录" spellcheck="false" />
       <button id="btn-go" class="btn primary">前往</button>
     </div>
     <button id="btn-start" class="btn accent">启动浏览器</button>
@@ -37,43 +35,37 @@
     <button id="btn-go-cases" class="btn accent">生成测试用例</button>
   </div>
 
-  <main class="workspace">
-    <!-- 左：树 -->
+  <main class="workspace layout-3">
+    <!-- 左：功能点树状图 -->
     <aside class="col tree-col">
       <div class="col-head">
         <b>功能点树</b>
         <div>
           <button id="btn-add-module" class="mini">+模块</button>
-          <button id="btn-add-title" class="mini">+标题</button>
+          <button id="btn-add-title" class="mini">+目录</button>
           <button id="btn-add-point" class="mini">+功能点</button>
         </div>
       </div>
-      <div class="hint-line">模块 → 一级/二级/三级标题 → 功能点 → 测试/验证</div>
+      <div class="hint-line">模块 → 一级目录 → 二级目录 → 三级目录 → 功能点（缺级用 <b>/</b> 占位）</div>
       <div id="tree" class="tree"></div>
-      <div class="col-head" style="margin-top:10px"><b>节点判定</b></div>
+      <div class="col-head"><b>节点判定</b>
+        <span class="muted" id="sel-node-info">选中树节点</span>
+      </div>
       <div class="status-box">
-        <div id="sel-node-info" class="muted">点击树节点进行标注</div>
-        <textarea id="node-annotation" rows="3" placeholder="问题标注 / 备注（如：按钮无响应、列表为空）"></textarea>
-        <div class="actions">
-          <button class="btn pass" id="btn-pass">通过</button>
-          <button class="btn fail" id="btn-fail">不通过</button>
-          <button class="btn" id="btn-pending">待定</button>
-          <button class="btn ghost" id="btn-ignore">忽略</button>
-        </div>
+        <textarea id="node-annotation" rows="2" placeholder="问题标注 / 备注"></textarea>
       </div>
     </aside>
 
-    <!-- 中：实时镜像 + 元素 -->
+    <!-- 中：浏览器手动操作 -->
     <section class="col center-col">
       <div class="col-head">
-        <b>页面视图（实时镜像）</b>
+        <b>浏览器手动操作界面（实时镜像）</b>
         <div class="actions">
-          <input id="type-input" placeholder="点选页面输入框后，在此键入账号/密码，回车提交" style="min-width:280px" />
+          <input id="type-input" placeholder="点选输入框后在此键入，回车提交" style="min-width:220px" />
           <button class="mini" id="btn-send-type">键入</button>
           <button class="mini" id="btn-send-enter">Enter</button>
           <button class="mini" id="btn-send-tab">Tab</button>
           <button class="mini" id="btn-clear-input">清空</button>
-          <span id="page-title" class="muted"></span>
         </div>
       </div>
       <div class="live-wrap">
@@ -83,10 +75,11 @@
           </div>
           <div id="live-cross"></div>
         </div>
-        <div class="live-hint muted">点击画面 = 在页面内点击（可点输入框后在上方键入并登录）</div>
+        <div class="live-hint muted">点击画面 = 页面内点击（登录、展开菜单、点功能入口）</div>
       </div>
-      <div class="col-head"><b>交互元素</b>
-        <span class="muted" id="el-count">点击行 = 标为功能点</span>
+      <div class="col-head">
+        <b>交互元素</b>
+        <span class="muted" id="el-count">勾选/点「标功能点」= 挂到当前树节点</span>
       </div>
       <div class="filters">
         <input id="el-filter" placeholder="过滤：按钮/输入框/名称…" />
@@ -98,13 +91,16 @@
           <option value="link">链接</option>
           <option value="check">勾选</option>
         </select>
-        <select id="el-frame"></select>
+        <select id="el-frame"><option value="">全部 frame</option></select>
+        <button class="mini" id="btn-sel-all">全选</button>
+        <button class="mini" id="btn-sel-none">全不选</button>
+        <button class="mini primary" id="btn-mark-selected">勾选挂到当前功能点</button>
       </div>
       <div class="table-wrap el-table-wrap">
         <table class="table" id="el-table">
           <thead>
             <tr>
-              <th width="46">选</th>
+              <th width="46"><input type="checkbox" id="el-select-all" title="全选" /></th>
               <th width="70">类型</th>
               <th>名称/文本</th>
               <th>selector</th>
@@ -117,18 +113,36 @@
       </div>
     </section>
 
-    <!-- 右：已标功能点 / 用例 -->
+    <!-- 右：配置/操作 -->
     <aside class="col right-col">
-      <div class="col-head"><b>已标功能点</b><span class="muted" id="marked-count">0</span></div>
+      <div class="col-head"><b>判定通过与否</b></div>
+      <div class="status-box">
+        <div class="actions">
+          <button class="btn pass" id="btn-pass">通过</button>
+          <button class="btn fail" id="btn-fail">不通过</button>
+          <button class="btn" id="btn-pending">待定</button>
+          <button class="btn ghost" id="btn-ignore">忽略</button>
+        </div>
+      </div>
+
+      <div class="col-head"><b>截图</b></div>
+      <div class="status-box">
+        <label class="switch"><input type="checkbox" id="auto-shot" checked /> 自动截图</label>
+        <button class="btn" id="btn-shot" style="margin-top:8px;width:100%">手动截图</button>
+      </div>
+
+      <div class="col-head"><b>已标功能点</b>
+        <span class="muted" id="marked-count">0</span>
+      </div>
       <div id="marked-list" class="marked-list"></div>
 
-      <div class="col-head" style="margin-top:12px"><b>树用例预览</b></div>
-      <div class="actions">
+      <div class="col-head"><b>树用例预览</b></div>
+      <div class="actions" style="padding:0 10px">
         <button class="mini" id="btn-preview">刷新预览</button>
         <button class="mini primary" id="btn-build-cases">生成入库</button>
         <button class="mini" id="btn-export">导出Excel</button>
       </div>
-      <div id="case-preview" class="case-preview muted">按「模块-标题-功能点-XX功能点测试/验证」生成</div>
+      <div id="case-preview" class="case-preview muted">命名：模块-一级-二级-三级-功能点-XX功能点测试/验证</div>
     </aside>
   </main>
 

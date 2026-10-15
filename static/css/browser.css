@@ -71,25 +71,24 @@
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(280px, 340px);
   gap: 10px;
   padding: 10px 12px 24px;
   max-width: 1920px;
   margin: 0 auto;
   min-height: calc(100vh - 120px);
 }
+/* 三栏：树 | 浏览器操作 | 配置 */
+.layout-3 {
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(280px, 320px);
+}
 @media (max-width: 1280px) {
-  .workspace {
-    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  .layout-3 {
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   }
-  .right-col {
-    grid-column: 1 / -1;
-  }
+  .layout-3 .right-col { grid-column: 1 / -1; }
 }
 @media (max-width: 900px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
+  .layout-3 { grid-template-columns: 1fr; }
 }
 
 .col {
@@ -135,10 +134,11 @@
   flex: 1;
   overflow: auto;
   padding: 8px;
-  max-height: 420px;
+  min-height: 280px;
+  max-height: calc(100vh - 360px);
 }
 .tree-node {
-  padding: 4px 6px;
+  padding: 5px 6px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 12.5px;
@@ -151,17 +151,21 @@
 .tree-node.active { background: #e0e9ff; }
 .tree-node .badge-sm {
   font-size: 10px;
-  padding: 0 5px;
+  padding: 1px 6px;
   border-radius: 4px;
   background: #e5e7eb;
   color: var(--muted);
+  flex-shrink: 0;
 }
-.tree-node .badge-sm.module { background: #dbeafe; color: #1d4ed8; }
+.tree-node .badge-sm.module { background: #1d4ed8; color: #fff; }
+.tree-node .badge-sm.title1 { background: #dbeafe; color: #1d4ed8; }
+.tree-node .badge-sm.title2 { background: #e0e7ff; color: #4338ca; }
+.tree-node .badge-sm.title3 { background: #ede9fe; color: #6d28d9; }
 .tree-node .badge-sm.point { background: #dcfce7; color: #15803d; }
 .tree-node .badge-sm.case { background: #fef3c7; color: #b45309; }
 .tree-node .st-pass { color: var(--ok); }
-.tree-node .st-fail { color: var(--danger); }
-.tree-children { margin-left: 14px; border-left: 1px solid var(--line); padding-left: 6px; }
+.tree-node .st-fail { color: var(--danger); font-weight: 700; }
+.tree-children { margin-left: 12px; border-left: 1px solid var(--line); padding-left: 8px; }
 
 .status-box { padding: 10px 12px; border-top: 1px solid var(--line); }
 .status-box textarea { width: 100%; margin: 8px 0; }

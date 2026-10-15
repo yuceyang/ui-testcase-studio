@@ -121,27 +121,45 @@ EXTRACT_JS = r"""
     } catch (e) {}
   }
 
-  // 导航/菜单树线索
+  // 导航/菜单树线索（支持 Element-UI 层级：模块 → 一级）
   const navHints = [];
   const navRoots = document.querySelectorAll(
     'nav, .menu, .sidebar, .el-menu, .ant-menu, [class*=menu], [class*=nav], [class*=sidebar], [role=navigation]'
   );
+  let menuIdx = 0;
   for (const root of Array.from(navRoots).slice(0, 4)) {
-    const links = root.querySelectorAll('a, [role=menuitem], .el-menu-item, .ant-menu-item, li');
-    for (const a of Array.from(links).slice(0, 80)) {
-      const text = (a.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 40);
-      const href = a.getAttribute('href') || '';
-      const tag = a.tagName.toLowerCase();
-      if (!text && !href) continue;
-      navHints.push({ text, href, tag, depth: 0 });
+    // 顶层：sub-menu 标题或直接 menu-item
+    const topItems = root.querySelectorAll(':scope > ul > li, :scope > li, .el-menu > li');
+    const tops = topItems.length ? topItems : root.querySelectorAll('li');
+    for (const li of Array.from(tops).slice(0, 30)) {
+      const text = (li.querySelector(':scope > .el-sub-menu__title, :scope > a, :scope > span, :scope > div')?.innerText || li.innerText || '')
+        .trim().replace(/\\s+/g, ' ').slice(0, 40);
+      const href = (li.querySelector('a') && li.querySelector('a').getAttribute('href')) || '';
+      const isSub = li.classList.contains('el-sub-menu') || !!li.querySelector(':scope > ul');
+      const id = 'm' + (menuIdx++);
+      navHints.push({ text, href, tag: li.tagName.toLowerCase(), level: 0, id, isSub });
+
+      if (isSub) {
+        const subs = li.querySelectorAll(':scope > ul > li');
+        for (const sub of Array.from(subs).slice(0, 20)) {
+          const st = (sub.innerText || '').trim().replace(/\\s+/g, ' ').slice(0, 40);
+          const sh = (sub.querySelector('a') && sub.querySelector('a').getAttribute('href')) || '';
+          if (!st && !sh) continue;
+          navHints.push({
+            text: st, href: sh, tag: sub.tagName.toLowerCase(),
+            level: 1, parent: id, module_ref: id,
+          });
+        }
+      }
     }
+    if (navHints.length) break;
   }
 
   return {
     url: location.href,
     title: document.title,
     elements: out,
-    navHints: navHints.slice(0, 60),
+    navHints: navHints.slice(0, 80),
   };
 }
 """
@@ -182,18 +200,31 @@ def parse_extract(raw: dict[str, Any], frame_path: str = "main", page_url: str =
 
 
 def extract_nav_tree(nav_hints: list[dict]) -> list[dict]:
-    """从导航线索粗提层级（菜单文字 → 树节点）。"""
+    """保留层级字段，供树构建使用。"""
     seen = set()
     nodes = []
     for h in nav_hints:
         text = (h.get("text") or "").strip()
-        if not text or len(text) < 2:
+        if not text and h.get("level") == 0:
+            text = "模块"
+        if not text:
             continue
-        key = text.lower()
+        key = f"{h.get('level')}:{text.lower()}:{h.get('parent') or ''}"
         if key in seen:
             continue
         seen.add(key)
-        nodes.append({"name": text, "href": h.get("href") or "", "tag": h.get("tag") or ""})
+        nodes.append(
+            {
+                "id": h.get("id") or "",
+                "name": text,
+                "href": h.get("href") or "",
+                "tag": h.get("tag") or "",
+                "level": h.get("level", 0),
+                "parent": h.get("parent") or "",
+                "module_ref": h.get("module_ref") or "",
+                "is_sub": bool(h.get("isSub")),
+            }
+        )
     return nodes
 
 

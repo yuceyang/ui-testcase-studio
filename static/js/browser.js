@@ -361,6 +361,18 @@ function renderElements() {
     )
     .join("");
 
+  // 全选框状态
+  const allCb = $("#el-select-all");
+  if (allCb) {
+    const visible = rows.map((r) => r.id);
+    const checkedN = visible.filter((id) => {
+      const el = state.elements.find((x) => x.id === id);
+      return el && el.marked;
+    }).length;
+    allCb.checked = visible.length > 0 && checkedN === visible.length;
+    allCb.indeterminate = checkedN > 0 && checkedN < visible.length;
+  }
+
   tb.querySelectorAll("button[data-act=mark]").forEach((btn) => {
     btn.addEventListener("click", () => markElement(btn.dataset.id));
   });
@@ -377,11 +389,50 @@ function renderElements() {
   });
 }
 
+// 全选 / 全不选 / 批量挂载
+$("#el-select-all").addEventListener("change", (e) => {
+  const boxes = $$("#el-table .el-check");
+  boxes.forEach((cb) => {
+    cb.checked = e.target.checked;
+    const id = cb.dataset.id;
+    const el = state.elements.find((x) => x.id === id);
+    if (el) el.marked = e.target.checked;
+  });
+  if (e.target.checked) {
+    boxes.forEach((cb) => markElement(cb.dataset.id));
+  } else {
+    boxes.forEach((cb) => unmarkElement(cb.dataset.id));
+  }
+  renderElements();
+});
+
+$("#btn-sel-all").addEventListener("click", () => {
+  $("#el-select-all").checked = true;
+  $("#el-select-all").dispatchEvent(new Event("change"));
+});
+$("#btn-sel-none").addEventListener("click", () => {
+  $("#el-select-all").checked = false;
+  $("#el-select-all").dispatchEvent(new Event("change"));
+});
+
+$("#btn-mark-selected").addEventListener("click", async () => {
+  const ids = $$("#el-table .el-check:checked").map((x) => x.dataset.id);
+  if (!ids.length) return toast("请先勾选元素", "err");
+  if (!state.selectedNodeId) {
+    toast("请在左侧选中树节点（功能点）后再挂载", "err");
+    return;
+  }
+  for (const id of ids) await markElement(id, true);
+  toast(`已挂到当前功能点 ${ids.length} 个`, "ok");
+  await loadTree();
+  selectNode(state.selectedNodeId);
+});
+
 $("#el-filter").addEventListener("input", renderElements);
 $("#el-kind").addEventListener("change", renderElements);
 $("#el-frame").addEventListener("change", renderElements);
 
-async function markElement(elId) {
+async function markElement(elId, quiet = false) {
   const el = state.elements.find((x) => x.id === elId);
   if (!el) return;
   try {
@@ -390,13 +441,12 @@ async function markElement(elId) {
     if (idx >= 0) state.elements[idx] = { ...state.elements[idx], ...r.element, marked: true };
     await loadMarked();
     drawGhost();
-    // 若有选中树节点，把元素挂上去
     if (state.selectedNodeId) {
       await attachElToNode(state.selectedNodeId, r.element.id);
     }
-    toast("已标为功能点", "ok");
+    if (!quiet) toast("已标为功能点", "ok");
   } catch (e) {
-    toast(e.message, "err");
+    if (!quiet) toast(e.message, "err");
   }
 }
 
@@ -463,9 +513,9 @@ function renderTree() {
   };
   const typeCls = {
     module: "module",
-    title1: "",
-    title2: "",
-    title3: "",
+    title1: "title1",
+    title2: "title2",
+    title3: "title3",
     point: "point",
     case: "case",
   };
@@ -517,8 +567,14 @@ function selectNode(id) {
   renderTree();
   if (!n) return;
   const names = pathNames(id);
-  $("#sel-node-info").textContent = `${names} · 状态 ${n.status || "pending"}`;
+  $("#sel-node-info").textContent = `${names} · ${n.status || "pending"}`;
   $("#node-annotation").value = n.annotation || "";
+  // 高亮该节点挂载的元素
+  const ids = new Set(n.element_ids || []);
+  document.querySelectorAll(".shot-rect").forEach((r) => {
+    r.classList.toggle("strong", ids.has(r.dataset.elId));
+    r.classList.toggle("hover", ids.has(r.dataset.elId));
+  });
 }
 
 function pathNames(id) {
@@ -559,11 +615,14 @@ $("#btn-add-module").addEventListener("click", async () => {
 });
 
 $("#btn-add-title").addEventListener("click", async () => {
-  const name = prompt("标题名称（一级/二级/三级请选节点后改类型，这里默认二级）");
-  if (!name) return;
+  const lvl = prompt("目录层级：1=一级 2=二级 3=三级", "1");
+  if (!lvl) return;
+  const map = { "1": "title1", "2": "title2", "3": "title3" };
+  const node_type = map[lvl] || "title1";
+  const name = prompt("目录名称（缺省请填 /）", "/") || "/";
   await api("/api/browser/tree/node", {
     method: "POST",
-    body: { name, node_type: "title2", parent_id: state.selectedNodeId },
+    body: { name, node_type, parent_id: state.selectedNodeId },
   });
   await loadTree();
 });

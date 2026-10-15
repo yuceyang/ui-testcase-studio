@@ -1,4 +1,8 @@
-"""树形功能点结构：模块 → 一级/二级/三级标题 → 功能点 → XX功能点测试/验证。"""
+"""树形功能点结构：模块 → 一级/二级/三级目录 → 功能点 → 测试/验证。
+
+缺级目录用 "/" 占位，保证用例命名链完整：
+  模块-一级-二级-三级-功能点-XX功能点测试/验证
+"""
 from __future__ import annotations
 
 import uuid
@@ -10,12 +14,14 @@ from ..models import ExtraRequirement, TestCase
 LEVEL_TYPES = ("module", "title1", "title2", "title3", "point", "case")
 LEVEL_LABEL = {
     "module": "模块",
-    "title1": "一级标题",
-    "title2": "二级标题",
-    "title3": "三级标题",
+    "title1": "一级",
+    "title2": "二级",
+    "title3": "三级",
     "point": "功能点",
-    "case": "测试/验证",
+    "case": "验证",
 }
+LEVEL_ORDER = ["module", "title1", "title2", "title3", "point"]
+PLACEHOLDER = "/"
 
 
 def new_node(
@@ -24,10 +30,13 @@ def new_node(
     parent_id: str | None = None,
     **extra: Any,
 ) -> dict:
+    nt = node_type if node_type in LEVEL_TYPES else "point"
+    if nt.startswith("title") and not (name or "").strip():
+        name = PLACEHOLDER
     return {
         "id": "nd_" + uuid.uuid4().hex[:10],
         "name": name,
-        "node_type": node_type if node_type in LEVEL_TYPES else "point",
+        "node_type": nt,
         "parent_id": parent_id,
         "status": extra.pop("status", "pending"),  # pending | pass | fail | ignored
         "annotation": extra.pop("annotation", ""),
@@ -41,7 +50,6 @@ def new_node(
 
 
 def path_of(node_id: str, tree: list[dict]) -> list[dict]:
-    """从根到该节点的路径。"""
     by_id = {n["id"]: n for n in tree}
     chain: list[dict] = []
     cur = by_id.get(node_id)
@@ -59,22 +67,62 @@ def full_path_name(node_id: str, tree: list[dict], sep: str = " / ") -> str:
     return sep.join(n.get("name") or LEVEL_LABEL.get(n.get("node_type"), "") for n in chain)
 
 
+def padded_path_names(node_id: str, tree: list[dict]) -> list[str]:
+    """返回 5 段：模块/一级/二级/三级/功能点；缺失层级用 / 占位。"""
+    chain = path_of(node_id, tree)
+    by_type = {n.get("node_type"): n.get("name") or PLACEHOLDER for n in chain}
+    # 最后一个非 title 节点视为功能点
+    point_name = None
+    for n in reversed(chain):
+        if n.get("node_type") in ("point", "case"):
+            point_name = n.get("name") or PLACEHOLDER
+            break
+    if point_name is None and chain:
+        point_name = chain[-1].get("name") or PLACEHOLDER
+
+    return [
+        by_type.get("module") or PLACEHOLDER,
+        by_type.get("title1") or PLACEHOLDER,
+        by_type.get("title2") or PLACEHOLDER,
+        by_type.get("title3") or PLACEHOLDER,
+        point_name or PLACEHOLDER,
+    ]
+
+
 def case_title_for(node: dict, tree: list[dict], suffix: str = "测试/验证") -> str:
-    """生成「模块-一级-…-功能点-XX测试/验证」，避免功能点名重复拼接。"""
-    chain = path_of(node.get("id"), tree)
-    names = [n.get("name") or "" for n in chain if n.get("name")]
-    if not names:
-        return suffix
-    if node.get("node_type") == "case":
-        # 已是验证节点，原样输出路径
-        return "-".join(names)
-    # 功能点：路径 + 「XX功能点测试/验证」
-    point_name = names[-1]
-    return "-".join(names[:-1] + [f"{point_name}功能点{suffix}"] if len(names) > 1 else [f"{point_name}功能点{suffix}"])
+    """模块-一级-二级-三级-功能点-XX功能点测试/验证（缺级以 / 占位）。"""
+    parts = padded_path_names(node.get("id"), tree)
+    point_name = parts[-1] if parts[-1] != PLACEHOLDER else "功能点"
+    return "-".join(parts[:-1] + [f"{point_name}功能点{suffix}"])
 
 
 def iter_points(tree: list[dict]) -> list[dict]:
     return [n for n in tree if n.get("node_type") in ("point", "case")]
+
+
+def ensure_child_levels(parent: dict, tree: list[dict]) -> dict:
+    """
+    在 parent 下补齐 title2/title3 占位（若 parent 是 title1），
+    返回应挂功能点的目标节点。
+    """
+    nt = parent.get("node_type")
+    if nt == "title1":
+        t2 = next((n for n in tree if n.get("parent_id") == parent["id"] and n.get("node_type") == "title2"), None)
+        if not t2:
+            t2 = new_node(PLACEHOLDER, "title2", parent["id"])
+            tree.append(t2)
+        t3 = next((n for n in tree if n.get("parent_id") == t2["id"] and n.get("node_type") == "title3"), None)
+        if not t3:
+            t3 = new_node(PLACEHOLDER, "title3", t2["id"])
+            tree.append(t3)
+        return t3
+    if nt == "title2":
+        t3 = next((n for n in tree if n.get("parent_id") == parent["id"] and n.get("node_type") == "title3"), None)
+        if not t3:
+            t3 = new_node(PLACEHOLDER, "title3", parent["id"])
+            tree.append(t3)
+        return t3
+    return parent
 
 
 def build_cases_from_tree(
@@ -82,7 +130,7 @@ def build_cases_from_tree(
     marked_elements: list[dict],
     extra: ExtraRequirement,
 ) -> list[TestCase]:
-    """按树节点生成只读测试用例，命名对齐「模块-…-功能点-测试/验证」。"""
+    """按树节点生成只读测试用例，命名：模块-一-二-三-功能点-XX功能点测试/验证。"""
     cases: list[TestCase] = []
     el_by_id = {e.get("id"): e for e in marked_elements}
     used_titles: set[str] = set()
@@ -98,11 +146,10 @@ def build_cases_from_tree(
             title = f"{title or '功能点'}-{uuid.uuid4().hex[:4]}"
         used_titles.add(title)
 
-        path = full_path_name(node.get("id"), tree)
+        path = " / ".join(padded_path_names(node.get("id"), tree))
         module = path_of(node.get("id"), tree)
         module_name = module[0]["name"] if module else "未分类"
 
-        # 关联元素
         els = [el_by_id[eid] for eid in (node.get("element_ids") or []) if eid in el_by_id]
         if not els and node.get("elements"):
             els = node.get("elements") or []
@@ -115,14 +162,13 @@ def build_cases_from_tree(
         sel = els[0].get("selector", "") if els else ""
         method = "GET"
 
-        # 主验证
         cases.append(
             TestCase(
                 id=uuid.uuid4().hex[:12],
                 point_id=node.get("id", ""),
                 title=title,
                 module=path,
-                priority="P0" if node.get("status") == "pass" else "P1",
+                priority="P0" if node.get("status") == "fail" else "P1",
                 preconditions=f"已鉴权登录系统；打开页面：{url or '目标页面'}",
                 steps=(
                     f"1. 进入「{path}」\n"
@@ -133,14 +179,13 @@ def build_cases_from_tree(
                 data=f"selector={sel}" if sel else "—",
                 method=method,
                 url=url,
-                auth_notes="已带有效 Cookie/Token",
+                auth_notes="已带有效会话（镜像内手动登录）",
                 category="positive",
                 ai_rationale=f"结构: {path}；状态: {node.get('status','pending')}",
                 approved=node.get("status") != "fail",
             )
         )
 
-        # 异常
         if extra.include_negative:
             cases.append(
                 TestCase(
@@ -149,11 +194,11 @@ def build_cases_from_tree(
                     title=title + "（异常输入）",
                     module=path,
                     priority="P1",
-                    preconditions="已鉴权登录；位于该功能页面",
+                    preconditions="已登录；位于该功能页面",
                     steps=(
-                        f"1. 在相关输入框输入非法/超长/特殊字符\n"
-                        f"2. 点「查询」或触发搜索（不点提交/删除）\n"
-                        f"3. 观察提示"
+                        "1. 在相关输入框输入非法/超长/特殊字符\n"
+                        "2. 点「查询」或触发搜索（不点提交/删除）\n"
+                        "3. 观察提示"
                     ),
                     expected="给出明确校验提示；不产生脏数据；不触发写操作",
                     data="含 <script>、空格、超长字符串",
@@ -166,22 +211,21 @@ def build_cases_from_tree(
                 )
             )
 
-        # 鉴权
         if extra.include_auth_cases:
             cases.append(
                 TestCase(
                     id=uuid.uuid4().hex[:12],
                     point_id=node.get("id", ""),
-                    title=title + "（未登录/Token失效）",
+                    title=title + "（未登录/会话失效）",
                     module=path,
                     priority="P0",
-                    preconditions="清除 Cookie 或使用过期 Token",
-                    steps="1. 无有效鉴权访问该功能\n2. 观察跳转/提示",
+                    preconditions="清除会话或重新打开无痕",
+                    steps="1. 无有效会话访问该功能\n2. 观察跳转/提示",
                     expected="401 或跳转登录；不展示业务数据；不改服务端状态",
                     data="无",
                     method=method,
                     url=url,
-                    auth_notes="无/过期鉴权",
+                    auth_notes="无/过期会话",
                     category="auth",
                     ai_rationale="鉴权边界",
                     approved=True,
@@ -189,7 +233,6 @@ def build_cases_from_tree(
             )
 
         if node.get("annotation"):
-            # 标注问题时生成一条复核用例
             cases.append(
                 TestCase(
                     id=uuid.uuid4().hex[:12],
@@ -218,21 +261,50 @@ def auto_tree_from_nav(
     module_name: str = "默认模块",
     page_url: str = "",
 ) -> list[dict]:
-    """把导航菜单粗建成：模块 / 一级标题 / （叶子作功能点）。"""
+    """
+    从导航菜单粗建层级。
+      模块 → 一级目录 → 二级(/) → 三级(/) → 功能点
+    nav_hints 条目：{id, name, href, level, parent, ...}
+    """
     tree: list[dict] = []
-    root = new_node(module_name, "module", None, url=page_url)
-    tree.append(root)
 
-    # 简单启发式：前几个作一级，其余作二级；或全作一级
-    titles: list[dict] = []
-    for i, h in enumerate(nav_hints[:30]):
-        name = (h.get("name") or "").strip()
-        if not name:
+    def url_of(h: dict) -> str:
+        return (h.get("href") or h.get("url") or page_url or "").strip()
+
+    modules = [h for h in nav_hints if h.get("level") == 0]
+    if not modules:
+        root = new_node(module_name, "module", None, url=page_url)
+        tree.append(root)
+        for h in nav_hints[:20]:
+            name = (h.get("name") or "").strip()
+            if not name:
+                continue
+            t1 = new_node(name, "title1", root["id"], url=url_of(h))
+            tree.append(t1)
+            target = ensure_child_levels(t1, tree)
+            tree.append(new_node(f"{name}查询", "point", target["id"], url=url_of(h)))
+        return tree
+
+    for m in modules:
+        mname = (m.get("name") or "模块").strip() or "模块"
+        mod = new_node(mname, "module", None, url=url_of(m))
+        tree.append(mod)
+        mid = m.get("id") or ""
+        children = [
+            h for h in nav_hints
+            if h.get("level") == 1 and (h.get("parent") == mid or h.get("module_ref") == mid)
+        ]
+        if not children:
+            t1 = new_node(PLACEHOLDER, "title1", mod["id"], url=url_of(m))
+            tree.append(t1)
+            target = ensure_child_levels(t1, tree)
+            tree.append(new_node(f"{mname}功能", "point", target["id"], url=url_of(m)))
             continue
-        t = new_node(name, "title1", root["id"], url=h.get("href") or page_url)
-        tree.append(t)
-        titles.append(t)
-        # 每个一级下挂一个功能点占位
-        p = new_node(name, "point", t["id"], url=h.get("href") or page_url)
-        tree.append(p)
+        for c in children:
+            cname = (c.get("name") or "").strip() or PLACEHOLDER
+            t1 = new_node(cname, "title1", mod["id"], url=url_of(c))
+            tree.append(t1)
+            target = ensure_child_levels(t1, tree)
+            pt = f"{cname}查询" if cname != PLACEHOLDER else f"{mname}查询"
+            tree.append(new_node(pt, "point", target["id"], url=url_of(c)))
     return tree
