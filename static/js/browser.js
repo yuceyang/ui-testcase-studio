@@ -1073,6 +1073,7 @@ $("#btn-del-tree-selected").addEventListener("click", async () => {
     (c) => !all.has(c.point_id) && !all.has(c.id)
   );
   state.projectCases = state.committedCases;
+  state.casesReady = true;
   state.checkedIds = new Set(
     Array.from(state.checkedIds).filter((x) => !all.has(x))
   );
