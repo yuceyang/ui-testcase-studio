@@ -821,6 +821,7 @@ function renderTree() {
     const stCls = st === "pass" ? "st-pass" : st === "fail" ? "st-fail" : "";
     return `
       <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}">
+        <input type="checkbox" class="tree-check" data-id="${n.id}" title="多选以便批量删除" />
         <span class="badge-sm ${n.node_type}">${typeLabel[n.node_type] || n.node_type}</span>
         <span class="nm">${esc(n.name)}</span>
         <span class="${stCls}">${st === "pass" ? "✓" : st === "fail" ? "✗" : ""}</span>
@@ -834,14 +835,37 @@ function renderTree() {
     `<div class="muted" style="padding:12px">空树。「自动建树」或右键镜像添加。</div>`;
 
   $("#tree").querySelectorAll(".tree-node").forEach((el) => {
-    el.addEventListener("click", () => selectNode(el.dataset.id));
+    el.addEventListener("click", (ev) => {
+      if (ev.target.classList && ev.target.classList.contains("tree-check")) return;
+      selectNode(el.dataset.id);
+    });
     el.addEventListener("dblclick", () => openNodeEditor(el.dataset.id));
     el.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();
       openNodeEditor(el.dataset.id);
     });
   });
+  $("#tree").querySelectorAll(".tree-check").forEach((cb) => {
+    cb.addEventListener("click", (ev) => ev.stopPropagation());
+    cb.addEventListener("change", (ev) => ev.stopPropagation());
+  });
 }
+
+$("#btn-del-tree-selected").addEventListener("click", async () => {
+  const ids = $$("#tree .tree-check:checked").map((x) => x.dataset.id);
+  if (!ids.length) return toast("请勾选要删除的节点", "err");
+  if (!confirm(`确认删除 ${ids.length} 个节点及其子节点？`)) return;
+  for (const id of ids) {
+    try {
+      await api(`/api/browser/tree/node/${id}`, { method: "DELETE" });
+    } catch {
+      /* ignore */
+    }
+  }
+  if (ids.includes(state.selectedNodeId)) state.selectedNodeId = null;
+  await loadTree();
+  toast(`已删除 ${ids.length} 个节点`, "ok");
+});
 
 async function loadTree() {
   try {
@@ -900,15 +924,23 @@ function fillParentOptions(sel, excludeId, selectedParent) {
       .join("");
 }
 
-function openMarkAs(elId) {
+function openMarkAs(elId, bulkIds) {
   const el = elId
     ? state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId)
     : null;
   $("#mka-el-id").value = elId || "";
+  const bulk = bulkIds || [];
   $("#mka-name").value = el?.name || el?.text || "";
+  $("#mka-title").textContent = bulk.length ? `批量标记 ${bulk.length} 个元素` : "标记为功能点树节点";
+  $("#mka-bulk-hint").style.display = bulk.length ? "block" : "none";
+  $("#mka-bulk-hint").textContent = bulk.length
+    ? "将按类型为每个元素建立树节点；名称用元素文本（可自动）"
+    : "";
+  $("#mka-name").disabled = bulk.length > 0;
   const cur = state.tree.find((n) => n.id === state.selectedNodeId);
   $("#mka-type").value = cur && cur.node_type !== "module" ? "point" : "module";
   fillParentOptions($("#mka-parent"), null, cur ? cur.id : "");
+  $("#modal-mark-as").dataset.bulk = JSON.stringify(bulk);
   $("#modal-mark-as").classList.remove("hidden");
 }
 
@@ -926,11 +958,42 @@ $("#btn-close-mark-as").addEventListener("click", () => $("#modal-mark-as").clas
 $("#btn-close-node").addEventListener("click", () => $("#modal-node").classList.add("hidden"));
 
 $("#btn-save-mark-as").addEventListener("click", async () => {
+  const bulk = JSON.parse($("#modal-mark-as").dataset.bulk || "[]");
+  const node_type = $("#mka-type").value;
+  const parent_id = node_type === "module" ? null : $("#mka-parent").value || null;
+
+  if (bulk.length) {
+    try {
+      for (const elId of bulk) {
+        const el = state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId);
+        if (el && !el.marked) await markElement(elId, true);
+        const name = (el?.name || el?.text || "节点").trim() || "节点";
+        await api("/api/browser/tree/node", {
+          method: "POST",
+          body: {
+            name,
+            node_type,
+            parent_id,
+            url: el?.page_url || "",
+            element_ids: elId ? [elId] : [],
+          },
+        });
+      }
+      $("#modal-mark-as").classList.add("hidden");
+      $("#modal-mark-as").dataset.bulk = "[]";
+      await loadTree();
+      renderElements();
+      drawGhost();
+      toast(`已批量标记 ${bulk.length} 个为「${node_type}」`, "ok");
+    } catch (e) {
+      toast(e.message, "err");
+    }
+    return;
+  }
+
   const elId = $("#mka-el-id").value;
   const el = state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId);
-  const node_type = $("#mka-type").value;
   const name = ($("#mka-name").value || el?.name || "节点").trim();
-  const parent_id = node_type === "module" ? null : $("#mka-parent").value || null;
   try {
     if (el && !el.marked && elId) await markElement(elId, true);
     const r = await api("/api/browser/tree/node", {
@@ -952,6 +1015,12 @@ $("#btn-save-mark-as").addEventListener("click", async () => {
   } catch (e) {
     toast(e.message, "err");
   }
+});
+
+$("#btn-bulk-mark-as").addEventListener("click", () => {
+  const ids = $$("#el-table .el-check:checked").map((x) => x.dataset.id);
+  if (!ids.length) return toast("请先勾选要批量标记的元素", "err");
+  openMarkAs(ids[0], ids);
 });
 
 $("#btn-save-node").addEventListener("click", async () => {

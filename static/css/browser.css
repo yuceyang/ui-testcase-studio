@@ -613,6 +613,20 @@
   gap: 6px;
   user-select: none;
 }
+.tree-check {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.mini.danger {
+  color: var(--danger);
+  border-color: #fecaca;
+}
+.mini.danger:hover {
+  background: #fef2f2;
+}
 .tree-node:hover { background: #f3f4f6; }
 .tree-node.active { background: #e0e9ff; }
 .tree-node .badge-sm {
