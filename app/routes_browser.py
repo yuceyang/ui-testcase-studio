@@ -148,6 +148,11 @@ def live_insert(payload: dict):
     return _run(lambda eng: _ok(**eng.live_insert_text(text)))
 
 
+@router.post("/live/copy")
+def live_copy():
+    return _run(lambda eng: eng.live_copy())
+
+
 @router.post("/live/key")
 def live_key(payload: dict):
     key = (payload or {}).get("key") or "Enter"

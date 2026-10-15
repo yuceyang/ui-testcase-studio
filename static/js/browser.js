@@ -267,9 +267,23 @@ function stageToViewport(clientX, clientY) {
 
 $("#live-img").addEventListener("click", async (ev) => {
   hideCtx();
-  // 聚焦 IME 代理，宿主输入法才可组字
   focusIme();
   const { x, y } = stageToViewport(ev.clientX, ev.clientY);
+
+  // Ctrl+点击识别框：切换标记
+  const rect = ev.target.closest && ev.target.closest(".shot-rect");
+  if (rect && (ev.ctrlKey || ev.metaKey)) {
+    ev.preventDefault();
+    const id = rect.dataset.elId;
+    const el = state.elements.find((e) => e.id === id) || state.marked.find((e) => e.id === id);
+    if (!el) return;
+    if (el.marked) await unmarkElement(id);
+    else await markElement(id);
+    renderElements();
+    drawGhost();
+    return;
+  }
+
   const cross = $("#live-cross");
   const img = $("#live-img");
   cross.style.display = "block";
@@ -350,11 +364,31 @@ if (ime) {
       return;
     }
     if (ev.ctrlKey || ev.metaKey) {
-      const m = { a: "Control+a", c: "Control+c", v: "Control+v", x: "Control+x" };
+      const m = {
+        a: "Control+a",
+        c: "Control+c",
+        v: "Control+v",
+        x: "Control+x",
+      };
       const k = (ev.key || "").toLowerCase();
-      if (m[k]) {
+      if (k === "c") {
+        // 复制页面选区
         ev.preventDefault();
-        await sendKey(m[k]);
+        try {
+          const text = await api("/api/browser/live/copy", { method: "POST", body: {} });
+          if (text && text.text) {
+            await navigator.clipboard.writeText(text.text).catch(() => {});
+            toast("已复制选中文本");
+          }
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      if (m[k]) {
+        // v/x 交给 paste / 原生
+        if (k !== "v") ev.preventDefault();
+        if (k !== "v") await sendKey(m[k]);
       }
       return;
     }
@@ -436,12 +470,9 @@ $("#live-stage").addEventListener("contextmenu", (ev) => {
     const elId = hit.dataset.elId;
     showCtx(lx, ly, [
       {
-        label: "取消该识别框",
+        label: "取消标记",
         onClick: async () => {
-          const el = state.elements.find((x) => x.id === elId);
-          if (el) el.marked = false;
-          if (state.marked.some((m) => m.id === elId)) await unmarkElement(elId, true);
-          // 从树挂载中移除
+          await unmarkElement(elId);
           for (const n of state.tree) {
             if (n.element_ids && n.element_ids.includes(elId)) {
               await api(`/api/browser/tree/node/${n.id}`, {
@@ -453,12 +484,16 @@ $("#live-stage").addEventListener("contextmenu", (ev) => {
           await loadTree();
           renderElements();
           drawGhost();
-          toast("已取消识别框");
+          toast("已取消标记");
         },
       },
       {
-        label: "标为功能点树节点…",
+        label: "标记为模块/目录/功能点…",
         onClick: () => openMarkAs(elId),
+      },
+      {
+        label: "一键取消本页全部标记",
+        onClick: () => clearPageMarks(),
       },
     ]);
     return;
@@ -466,14 +501,13 @@ $("#live-stage").addEventListener("contextmenu", (ev) => {
 
   const items = [
     {
-      label: "手动添加功能点到当前节点",
+      label: "添加功能点到当前节点",
       onClick: () => {
         const name = prompt("功能点名称", "手动功能点");
         if (!name) return;
-        const parent = state.selectedNodeId;
         api("/api/browser/tree/node", {
           method: "POST",
-          body: { name, node_type: "point", parent_id: parent },
+          body: { name, node_type: "point", parent_id: state.selectedNodeId },
         }).then(() => {
           loadTree();
           toast("已添加功能点");
@@ -481,15 +515,12 @@ $("#live-stage").addEventListener("contextmenu", (ev) => {
       },
     },
     {
-      label: "添加一级目录（/ 占位可改）",
-      onClick: () => {
-        const name = prompt("一级目录名称（可填 /）", "/");
-        if (name == null) return;
-        api("/api/browser/tree/node", {
-          method: "POST",
-          body: { name: name || "/", node_type: "title1", parent_id: state.selectedNodeId },
-        }).then(() => loadTree());
-      },
+      label: "标记为模块/目录/功能点…",
+      onClick: () => openMarkAs(""),
+    },
+    {
+      label: "一键取消本页全部标记",
+      onClick: () => clearPageMarks(),
     },
     {
       label: "此处截图",
@@ -498,6 +529,39 @@ $("#live-stage").addEventListener("contextmenu", (ev) => {
   ];
   showCtx(lx, ly, items);
 });
+
+async function clearPageMarks() {
+  if (!confirm("取消本页全部标记（不影响树上已建节点结构）？")) return;
+  const ids = state.elements.map((e) => e.id).concat(state.marked.map((m) => m.id));
+  for (const id of ids) {
+    try {
+      await api(`/api/browser/unmark/${id}`, { method: "POST", body: {} });
+    } catch {
+      /* ignore */
+    }
+    for (const n of state.tree) {
+      if (n.element_ids && n.element_ids.length) {
+        const next = n.element_ids.filter((x) => x !== id);
+        if (next.length !== n.element_ids.length) {
+          await api(`/api/browser/tree/node/${n.id}`, {
+            method: "PUT",
+            body: { element_ids: next },
+          });
+        }
+      }
+    }
+  }
+  state.elements.forEach((e) => (e.marked = false));
+  state.marked = [];
+  await loadTree();
+  await loadMarked();
+  renderElements();
+  drawGhost();
+  toast("已取消本页标记", "ok");
+}
+
+$("#btn-clear-marks") &&
+  $("#btn-clear-marks").addEventListener("click", () => clearPageMarks());
 
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#ctx-menu")) hideCtx();
@@ -546,11 +610,21 @@ function highlightEl(id) {
 }
 
 /* ================= 元素 ================= */
+function treeElementIds() {
+  const ids = new Set();
+  for (const n of state.tree) {
+    for (const id of n.element_ids || []) ids.add(id);
+  }
+  return ids;
+}
+
 function renderElements() {
   const tb = $("#el-table tbody");
   const q = ($("#el-filter").value || "").toLowerCase();
   const kind = $("#el-kind").value;
+  const inTree = treeElementIds();
   const rows = state.elements.filter((e) => {
+    if (inTree.has(e.id)) return false; // 已入树不再列出
     if (kind && e.kind !== kind) return false;
     if (!q) return true;
     return `${e.name} ${e.text} ${e.selector}`.toLowerCase().includes(q);
@@ -826,8 +900,10 @@ function fillParentOptions(sel, excludeId, selectedParent) {
 }
 
 function openMarkAs(elId) {
-  const el = state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId);
-  $("#mka-el-id").value = elId;
+  const el = elId
+    ? state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId)
+    : null;
+  $("#mka-el-id").value = elId || "";
   $("#mka-name").value = el?.name || el?.text || "";
   const cur = state.tree.find((n) => n.id === state.selectedNodeId);
   $("#mka-type").value = cur && cur.node_type !== "module" ? "point" : "module";

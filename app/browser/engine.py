@@ -358,6 +358,18 @@ class BrowserEngine:
 
         return self._call(_inner, timeout=15)
 
+    def live_copy(self) -> dict:
+        """读取页面当前选区文本。"""
+
+        def _inner() -> dict:
+            page = self._require_page()
+            text = page.evaluate(
+                "() => { try { return String(window.getSelection() || ''); } catch(e) { return ''; } }"
+            )
+            return {"text": text or ""}
+
+        return self._call(_inner, timeout=10)
+
     def live_press(self, key: str) -> dict:
         def _inner() -> dict:
             page = self._require_page()
