@@ -1,6 +1,6 @@
 ---
 feature: mark-ux-layout
-status: designed
+status: delivered
 updated: 2026-10-15
 branch: main
 commits: 
@@ -9,6 +9,10 @@ commits:
 # 粘贴 · 统一标记 · 取消标记 · 按树用例 · 布局重排
 
 ## Report
+
+**What was built** — 镜像复制/粘贴、统一「标记为」、右键取消与一键清标记、Ctrl+点切换、已入树元素不再自动列出；用例仅生成自树节点；交互元素表移到左下，中栏镜像更大。
+
+**Verification** — import/health PASS；页面含 left-col/clear-marks/live copy；JS 含 ctrl toggle 与 treeElementIds。提交 3fc4f40。
 
 ## [S1] Problem
 镜像内复制粘贴无效；标记入口分散；识别框右键无法取消标记，也无法一键清空/批量切换；已入树的元素仍出现在「自动发现元素」里；生成用例未严格以树上已识别功能点为准；交互元素表占中栏，浏览器镜像偏小。
@@ -46,8 +50,8 @@ commits:
 - 系统级剪贴板权限提权；拖拽跨窗口。
 
 ## Tasks
-- [ ] T1: 复制/粘贴通路 — acceptance: 镜像内 Ctrl+V 可粘贴中文；Ctrl+C 可复制页面选中 (covers: S2.1)
-- [ ] T2: 统一标记弹窗与右键菜单 — acceptance: 右键可标记为五类节点或取消 (covers: S2.2)
-- [ ] T3: 一键/批量/过滤已入树 — acceptance: 右键取消、Ctrl+点切换、一键清本页；树中元素不再自动列出 (covers: S2.3)
-- [ ] T4: 生成用例只用树节点 — acceptance: 预览/生成仅来自树 point/case (covers: S2.4)
-- [ ] T5: 布局重排 — acceptance: 元素表在左下，镜像明显更大 (covers: S2.5)
+[x] T1: 复制/粘贴通路 — acceptance: 镜像内 Ctrl+V 可粘贴中文；Ctrl+C 可复制页面选中 (covers: S2.1)
+[x] T2: 统一标记弹窗与右键菜单 — acceptance: 右键可标记为五类节点或取消 (covers: S2.2)
+[x] T3: 一键/批量/过滤已入树 — acceptance: 右键取消、Ctrl+点切换、一键清本页；树中元素不再自动列出 (covers: S2.3)
+[x] T4: 生成用例只用树节点 — acceptance: 预览/生成仅来自树 point/case (covers: S2.4)
+[x] T5: 布局重排 — acceptance: 元素表在左下，镜像明显更大 (covers: S2.5)
