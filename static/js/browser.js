@@ -258,7 +258,9 @@ $("#btn-reload").addEventListener("click", async () => {
 function stageToViewport(clientX, clientY) {
   const img = $("#live-img");
   const rect = img.getBoundingClientRect();
-  const scale = liveViewport.width / img.clientWidth;
+  // 显示宽含 liveZoom；换算到真实视口坐标
+  const displayW = rect.width;
+  const scale = liveViewport.width / displayW;
   return {
     x: (clientX - rect.left) * scale,
     y: (clientY - rect.top) * scale,
@@ -1219,6 +1221,193 @@ $("#btn-save-config-disk").addEventListener("click", async () => {
   }
 });
 
+/* ================= 分栏拖动 ================= */
+function initSplitters() {
+  const root = document.documentElement;
+  const saved = JSON.parse(localStorage.getItem("qts_layout") || "{}");
+  if (saved.leftW) root.style.setProperty("--left-w", saved.leftW + "px");
+  if (saved.treeFlex) root.style.setProperty("--tree-flex", saved.treeFlex);
+  if (saved.sideFlex) root.style.setProperty("--side-flex", saved.sideFlex);
+  if (saved.browserFlex) root.style.setProperty("--browser-flex", saved.browserFlex);
+  if (saved.elemFlex) root.style.setProperty("--elem-flex", saved.elemFlex);
+
+  const persist = () => {
+    const cs = getComputedStyle(root);
+    localStorage.setItem(
+      "qts_layout",
+      JSON.stringify({
+        leftW: parseInt(cs.getPropertyValue("--left-w")) || 320,
+        treeFlex: parseFloat(cs.getPropertyValue("--tree-flex")) || 52,
+        sideFlex: parseFloat(cs.getPropertyValue("--side-flex")) || 48,
+        browserFlex: parseFloat(cs.getPropertyValue("--browser-flex")) || 62,
+        elemFlex: parseFloat(cs.getPropertyValue("--elem-flex")) || 38,
+      })
+    );
+  };
+
+  $$(".splitter").forEach((sp) => {
+    sp.addEventListener("pointerdown", (ev) => {
+      ev.preventDefault();
+      sp.classList.add("active");
+      sp.setPointerCapture(ev.pointerId);
+      const kind = sp.dataset.split;
+      const startX = ev.clientX;
+      const startY = ev.clientY;
+      const cs = getComputedStyle(root);
+      const leftW = parseInt(cs.getPropertyValue("--left-w")) || 320;
+      const treeFlex = parseFloat(cs.getPropertyValue("--tree-flex")) || 52;
+      const sideFlex = parseFloat(cs.getPropertyValue("--side-flex")) || 48;
+      const browserFlex = parseFloat(cs.getPropertyValue("--browser-flex")) || 62;
+      const elemFlex = parseFloat(cs.getPropertyValue("--elem-flex")) || 38;
+      const leftEl = $("#left-stack");
+      const rightEl = $("#right-stack");
+      const treeEl = $("#tree-panel");
+      const sideEl = $("#side-panel");
+      const browEl = $("#browser-col");
+      const elEl = $("#elements-panel");
+
+      const move = (e) => {
+        if (kind === "main-v") {
+          const w = Math.min(Math.max(leftW + (e.clientX - startX), 220), 560);
+          root.style.setProperty("--left-w", w + "px");
+        } else if (kind === "left-v") {
+          const h = leftEl.clientHeight || 1;
+          const dy = e.clientY - startY;
+          const t = Math.min(Math.max(treeFlex + (dy / h) * 100, 25), 80);
+          root.style.setProperty("--tree-flex", t);
+          root.style.setProperty("--side-flex", 100 - t);
+        } else if (kind === "right-v") {
+          const h = rightEl.clientHeight || 1;
+          const dy = e.clientY - startY;
+          const t = Math.min(Math.max(browserFlex + (dy / h) * 100, 35), 85);
+          root.style.setProperty("--browser-flex", t);
+          root.style.setProperty("--elem-flex", 100 - t);
+        }
+        drawGhost();
+      };
+      const up = () => {
+        sp.classList.remove("active");
+        sp.removeEventListener("pointermove", move);
+        sp.removeEventListener("pointerup", up);
+        persist();
+      };
+      sp.addEventListener("pointermove", move);
+      sp.addEventListener("pointerup", up);
+    });
+  });
+}
+
+/* ================= 浏览器弹出窗 ================= */
+function initPopout() {
+  const pop = $("#popout-browser");
+  const body = $("#popout-body");
+  const chromeHost = $("#browser-col");
+  const placeholder = $("#browser-placeholder");
+  const bar = $("#popout-bar");
+  const resize = $("#popout-resize");
+  let dockedParent = null;
+
+  const popOut = () => {
+    if (!pop.classList.contains("hidden")) return;
+    dockedParent = chromeHost.parentElement;
+    body.appendChild(chromeHost);
+    pop.classList.remove("hidden");
+    placeholder.classList.remove("hidden");
+    chromeHost.style.flex = "1";
+    chromeHost.style.minHeight = "0";
+    toast("浏览器区已弹出，可拖动标题栏 / 右下角缩放");
+    drawGhost();
+  };
+
+  const dockBack = () => {
+    if (pop.classList.contains("hidden")) return;
+    // 插回右列顶部（elements 之前）
+    const right = $("#right-stack");
+    right.insertBefore(chromeHost, right.querySelector(".splitter") || right.querySelector(".elements-panel"));
+    chromeHost.style.flex = "";
+    chromeHost.style.minHeight = "";
+    pop.classList.add("hidden");
+    placeholder.classList.add("hidden");
+    drawGhost();
+  };
+
+  $("#btn-popout").addEventListener("click", popOut);
+  $("#btn-popout-dock").addEventListener("click", dockBack);
+  $("#btn-popout-close").addEventListener("click", dockBack);
+  $("#btn-dock-back").addEventListener("click", dockBack);
+
+  // 拖动
+  bar.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button")) return;
+    const rect = pop.getBoundingClientRect();
+    const ox = e.clientX - rect.left;
+    const oy = e.clientY - rect.top;
+    const move = (ev) => {
+      pop.style.left = Math.max(0, ev.clientX - ox) + "px";
+      pop.style.top = Math.max(0, ev.clientY - oy) + "px";
+      pop.style.right = "auto";
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+
+  // 缩放
+  resize.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    const rect = pop.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const w0 = rect.width;
+    const h0 = rect.height;
+    const move = (ev) => {
+      pop.style.width = Math.max(480, w0 + (ev.clientX - startX)) + "px";
+      pop.style.height = Math.max(320, h0 + (ev.clientY - startY)) + "px";
+      drawGhost();
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+
+/* ================= 镜像缩放 ================= */
+let liveZoom = 1;
+function applyZoom() {
+  const img = $("#live-img");
+  if (!img) return;
+  img.style.width = 100 * liveZoom + "%";
+  $("#zoom-label").textContent = Math.round(liveZoom * 100) + "%";
+  drawGhost();
+}
+function setZoom(z) {
+  liveZoom = Math.min(Math.max(z, 0.5), 3);
+  applyZoom();
+}
+function initZoom() {
+  $("#btn-zoom-in") && $("#btn-zoom-in").addEventListener("click", () => setZoom(liveZoom + 0.1));
+  $("#btn-zoom-out") && $("#btn-zoom-out").addEventListener("click", () => setZoom(liveZoom - 0.1));
+  $("#btn-zoom-reset") && $("#btn-zoom-reset").addEventListener("click", () => setZoom(1));
+  const stage = $("#live-stage");
+  stage &&
+    stage.addEventListener(
+      "wheel",
+      (ev) => {
+        if (!ev.ctrlKey) return; // 普通滚轮仍滚动页面内容
+        ev.preventDefault();
+        const delta = ev.deltaY > 0 ? -0.1 : 0.1;
+        setZoom(liveZoom + delta);
+      },
+      { passive: false }
+    );
+}
+
 /* init */
 refreshStatus();
 loadProjectList();
@@ -1227,3 +1416,6 @@ loadTree();
 loadShotList();
 startLive();
 loadLiveMeta();
+initSplitters();
+initPopout();
+initZoom();

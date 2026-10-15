@@ -26,10 +26,10 @@
     </div>
   </header>
 
-  <main class="workspace layout-2">
-    <!-- 左列：上=树，下=判定/截图/已标/用例 -->
-    <div class="col-stack left-stack">
-      <section class="col tree-panel">
+  <main class="workspace layout-2" id="workspace">
+    <!-- 左列 -->
+    <div class="col-stack left-stack" id="left-stack">
+      <section class="col tree-panel" id="tree-panel">
         <div class="col-head">
           <b>功能点树</b>
           <div>
@@ -41,8 +41,8 @@
         <div class="hint-line">模块 → 一/二/三级 → 功能点（缺级 <b>/</b>）· 双击编辑</div>
         <div id="tree" class="tree"></div>
       </section>
-
-      <section class="col side-panel">
+      <div class="splitter h" data-split="left-v" title="拖动调整上下比例"></div>
+      <section class="col side-panel" id="side-panel">
         <div class="col-head"><b>判定</b><span class="muted" id="sel-node-info">未选节点</span></div>
         <div class="status-box">
           <textarea id="node-annotation" rows="2" placeholder="问题标注"></textarea>
@@ -84,15 +84,24 @@
       </section>
     </div>
 
-    <!-- 右列：上=浏览器，下=交互元素 -->
-    <div class="col-stack right-stack">
-      <section class="col browser-col">
-        <div class="browser-chrome">
+    <div class="splitter v" data-split="main-v" title="拖动调整左右比例"></div>
+
+    <!-- 右列 -->
+    <div class="col-stack right-stack" id="right-stack">
+      <section class="col browser-col" id="browser-col">
+        <div class="browser-chrome" id="browser-chrome">
           <button id="btn-back" class="chrome-btn" title="后退">←</button>
           <button id="btn-reload" class="chrome-btn" title="刷新">⟳</button>
           <input id="addr-url" class="chrome-url" spellcheck="false"
                  placeholder="https://目标系统，镜像内点击登录（支持中文输入/粘贴）" />
           <button id="btn-go" class="chrome-go">前往</button>
+          <button id="btn-popout" class="chrome-btn" title="弹出独立窗口">⧉</button>
+          <span class="zoom-box">
+            <button id="btn-zoom-out" class="chrome-btn" title="缩小">−</button>
+            <span id="zoom-label">100%</span>
+            <button id="btn-zoom-in" class="chrome-btn" title="放大">+</button>
+            <button id="btn-zoom-reset" class="chrome-btn" title="重置">⟳</button>
+          </span>
         </div>
         <div class="live-wrap">
           <div class="live-stage" id="live-stage" tabindex="0">
@@ -111,12 +120,17 @@
             <div id="ctx-menu" class="ctx-menu hidden"></div>
           </div>
           <div class="live-hint muted">
-            左键点击页面 · Ctrl+点击识别框切换标记 · 右键识别框取消/标记 · Ctrl+V 粘贴
+            左键点击 · Ctrl+滚轮缩放镜像 · Ctrl+点识别框切换标记 · 右键标记/取消 · Ctrl+V 粘贴
           </div>
         </div>
+        <!-- 主界面停靠时的占位（弹出后显示） -->
+        <div id="browser-placeholder" class="browser-placeholder hidden">
+          浏览器操作区已弹出
+          <button class="mini" id="btn-dock-back">收回主界面</button>
+        </div>
       </section>
-
-      <section class="col elements-panel">
+      <div class="splitter h" data-split="right-v" title="拖动调整上下比例"></div>
+      <section class="col elements-panel" id="elements-panel">
         <div class="col-head">
           <b>交互元素</b>
           <div>
@@ -150,6 +164,20 @@
       </section>
     </div>
   </main>
+
+  <!-- 浏览器弹出窗（浮动，不挡主界面操作） -->
+  <div id="popout-browser" class="popout-browser hidden">
+    <div class="popout-bar" id="popout-bar">
+      <b>浏览器操作区</b>
+      <span class="muted">可拖动标题栏 / 右下角缩放</span>
+      <div>
+        <button class="mini" id="btn-popout-dock">收回</button>
+        <button class="mini" id="btn-popout-close">关闭</button>
+      </div>
+    </div>
+    <div class="popout-body" id="popout-body"></div>
+    <div class="popout-resize" id="popout-resize" title="拖动缩放窗口"></div>
+  </div>
 
   <!-- 大图详情 -->
   <div id="modal-shot" class="modal hidden">
