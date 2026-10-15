@@ -1,4 +1,4 @@
-/* 内置浏览器工作区交互 */
+/* 软件功能测试系统 — 工作台 */
 "use strict";
 
 const $ = (s) => document.querySelector(s);
@@ -10,10 +10,14 @@ const state = {
   marked: [],
   shots: [],
   selectedNodeId: null,
-  selectedShotId: "",
   sessionId: "",
   frameTree: [],
+  projectId: localStorage.getItem("qts_project_id") || "",
+  liveReady: false,
 };
+
+let liveTimer = null;
+let liveViewport = { width: 1680, height: 1050 };
 
 function toast(msg, type = "") {
   const el = $("#toast");
@@ -24,10 +28,7 @@ function toast(msg, type = "") {
 }
 
 async function api(path, options = {}) {
-  const opt = {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  };
+  const opt = { headers: { "Content-Type": "application/json" }, ...options };
   if (opt.body && typeof opt.body !== "string") opt.body = JSON.stringify(opt.body);
   const res = await fetch(path, opt);
   const text = await res.text();
@@ -46,14 +47,94 @@ function esc(s) {
   );
 }
 
+/* ================= 项目 ================= */
+async function loadProjectList() {
+  try {
+    const r = await api("/api/projects");
+    const list = r.projects || [];
+    const sel = $("#project-select");
+    sel.innerHTML =
+      `<option value="">选择项目…</option>` +
+      list.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    if (state.projectId) sel.value = state.projectId;
+    $("#shot-dir").textContent = state.projectId
+      ? `项目截图目录：data/projects/${state.projectId}/shots`
+      : "存储目录：data/output/shots（未选项目时）";
+  } catch {
+    /* ignore */
+  }
+}
+
+$("#btn-new-project").addEventListener("click", async () => {
+  const name = prompt("项目名称（按被测系统划分）", "等保2.0");
+  if (!name) return;
+  try {
+    const r = await api("/api/projects", { method: "POST", body: { name, base_url: $("#addr-url").value } });
+    state.projectId = r.project.id;
+    localStorage.setItem("qts_project_id", state.projectId);
+    await loadProjectList();
+    await saveProject(true);
+    toast("项目已创建：" + name, "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
+
+$("#project-select").addEventListener("change", async (e) => {
+  state.projectId = e.target.value;
+  localStorage.setItem("qts_project_id", state.projectId || "");
+  if (state.projectId) await loadProject();
+  await loadProjectList();
+});
+
+async function saveProject(silent = false) {
+  if (!state.projectId) {
+    if (!silent) toast("请先新建/选择项目", "err");
+    return;
+  }
+  try {
+    const r = await api(`/api/projects/${state.projectId}/save-from-engine`, { method: "POST", body: {} });
+    const p = r.project || {};
+    if (!silent) toast(`已保存（树 ${p.tree?.length || 0} / 已标 ${p.marked_elements?.length || 0}）`, "ok");
+    await loadShotList();
+  } catch (e) {
+    toast(e.message, "err");
+  }
+}
+$("#btn-save-project").addEventListener("click", () => saveProject(false));
+$("#btn-load-project").addEventListener("click", () => loadProject());
+
+async function loadProject() {
+  if (!state.projectId) return toast("未选项目", "err");
+  try {
+    const r = await api(`/api/projects/${state.projectId}/load`, {
+      method: "POST",
+      body: { restore_login: true },
+    });
+    state.tree = r.project.tree || [];
+    state.marked = r.project.marked_elements || [];
+    state.shots = r.project.shots || [];
+    renderTree();
+    renderMarked();
+    await loadShotList();
+    toast(`已加载 ${r.project.name}（恢复登录:${r.restored_login ? "是" : "否"}）`, "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+}
+
 /* ================= 浏览器 / 实时镜像 ================= */
-let liveTimer = null;
-let liveViewport = { width: 1680, height: 1050 };
+function setLiveVisible(on) {
+  $("#live-empty").classList.toggle("hidden", on);
+  $("#live-frame").classList.toggle("hidden", !on);
+  state.liveReady = !!on;
+}
 
 function startLive() {
   stopLive();
-  liveTimer = setInterval(refreshLiveFrame, 320);
+  liveTimer = setInterval(refreshLiveFrame, 300);
 }
+
 function stopLive() {
   if (liveTimer) clearInterval(liveTimer);
   liveTimer = null;
@@ -64,48 +145,40 @@ async function refreshLiveFrame() {
     const res = await fetch("/api/browser/live/frame", { cache: "no-store" });
     if (!res.ok) return;
     const blob = await res.blob();
+    if (blob.size < 100) return;
     const img = $("#live-img");
     const old = img.src;
     img.src = URL.createObjectURL(blob);
     if (old && old.startsWith("blob:")) URL.revokeObjectURL(old);
-    // 记录显示尺寸，供点击换算
+    setLiveVisible(true);
+    await loadLiveMeta(true);
+    drawGhost();
   } catch {
-    /* 未启动时忽略 */
+    /* 未启动 */
   }
 }
 
-async function loadLiveMeta() {
+async function loadLiveMeta(quiet = true) {
   try {
     const m = await api("/api/browser/live/meta");
     if (m.viewport) liveViewport = m.viewport;
-    if (m.title != null) $("#page-title").textContent = m.title || m.url || "";
     if (m.url) $("#addr-url").value = m.url;
+    if (!quiet && m.title != null) $("#br-status").textContent = `运行中 · ${(m.title || "").slice(0, 20)}`;
   } catch {
     /* ignore */
   }
 }
-
-$("#btn-start").addEventListener("click", async () => {
-  try {
-    await api("/api/browser/start", { method: "POST", body: { headless: true } });
-    startLive();
-    await loadLiveMeta();
-    toast("浏览器已启动，请在地址栏输入网址并手动登录", "ok");
-    refreshStatus();
-  } catch (e) {
-    toast(e.message, "err");
-  }
-});
 
 async function refreshStatus() {
   try {
     const c = await api("/api/browser/current");
     const el = $("#br-status");
     if (!c.running) {
-      el.textContent = "浏览器未启动";
+      el.textContent = "未启动";
       el.className = "badge";
+      setLiveVisible(false);
     } else {
-      el.textContent = `运行中 · ${c.title || c.url || ""}`.slice(0, 48);
+      el.textContent = `运行中 · ${c.title || c.url || ""}`.slice(0, 36);
       el.className = "badge ok";
     }
   } catch {
@@ -122,23 +195,37 @@ async function ensureBrowser() {
   }
 }
 
+$("#btn-start").addEventListener("click", async () => {
+  try {
+    await api("/api/browser/start", { method: "POST", body: { headless: true } });
+    // 重启清空残留识别框
+    state.elements = [];
+    state.marked = state.marked || [];
+    renderElements();
+    drawGhost();
+    startLive();
+    setLiveVisible(true);
+    await loadLiveMeta(false);
+    refreshStatus();
+    toast("浏览器已启动，可直接在镜像内操作", "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
+
 async function goAddress() {
   const url = $("#addr-url").value.trim();
   if (!url) return toast("请输入地址", "err");
   try {
     await ensureBrowser();
     const r = await api("/api/browser/live/navigate", { method: "POST", body: { url } });
-    $("#page-title").textContent = r.title || r.url || "";
-    // 换页后旧元素坐标失效，清空叠框，待重新发现
+    // 换页清叠框
     state.elements = [];
-    state.marked = state.marked.filter((m) => false); // 标记过期，需重新点选
     renderElements();
-    await loadMarked();
     drawGhost();
-    await loadLiveMeta();
     await refreshLiveFrame();
-    toast("已导航，可手动登录；请重新「自动发现元素」", "ok");
     refreshStatus();
+    toast("已导航", "ok");
   } catch (e) {
     toast(e.message, "err");
   }
@@ -147,11 +234,13 @@ $("#btn-go").addEventListener("click", goAddress);
 $("#addr-url").addEventListener("keydown", (e) => {
   if (e.key === "Enter") goAddress();
 });
-
 $("#btn-back").addEventListener("click", async () => {
   try {
     await api("/api/browser/back", { method: "POST", body: {} });
-    await loadLiveMeta();
+    state.elements = [];
+    renderElements();
+    drawGhost();
+    await refreshLiveFrame();
   } catch (e) {
     toast(e.message, "err");
   }
@@ -159,105 +248,192 @@ $("#btn-back").addEventListener("click", async () => {
 $("#btn-reload").addEventListener("click", async () => {
   try {
     await api("/api/browser/reload", { method: "POST", body: {} });
+    await refreshLiveFrame();
   } catch (e) {
     toast(e.message, "err");
   }
 });
 
-// 镜像点击 → 视口坐标
-$("#live-img").addEventListener("click", async (ev) => {
+/* --- 镜像内直操 --- */
+function stageToViewport(clientX, clientY) {
   const img = $("#live-img");
-  if (!img.clientWidth) return;
   const rect = img.getBoundingClientRect();
   const scale = liveViewport.width / img.clientWidth;
-  const x = (ev.clientX - rect.left) * scale;
-  const y = (ev.clientY - rect.top) * scale;
-  const cross = $("#live-cross");
-  cross.style.display = "block";
-  cross.style.left = ev.clientX - rect.left + img.offsetLeft + "px";
-  cross.style.top = ev.clientY - rect.top + img.offsetTop + "px";
-  try {
-    const r = await api("/api/browser/live/click", { method: "POST", body: { x, y } });
-    if (r.title != null) $("#page-title").textContent = r.title || r.url || "";
-  } catch (e) {
-    toast(e.message, "err");
-  }
-});
-
-// 键入到焦点（登录表单）
-async function sendType() {
-  const text = $("#type-input").value;
-  try {
-    await api("/api/browser/live/type", { method: "POST", body: { text } });
-    toast("已键入", "ok");
-  } catch (e) {
-    toast(e.message, "err");
-  }
+  return {
+    x: (clientX - rect.left) * scale,
+    y: (clientY - rect.top) * scale,
+  };
 }
-$("#btn-send-type").addEventListener("click", sendType);
-$("#type-input").addEventListener("keydown", async (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    await sendType();
-    await api("/api/browser/live/key", { method: "POST", body: { key: "Enter" } }).catch(() => {});
-  }
-});
-$("#btn-send-enter").addEventListener("click", async () => {
+
+$("#live-img").addEventListener("click", async (ev) => {
+  hideCtx();
+  $("#live-stage").focus();
+  const { x, y } = stageToViewport(ev.clientX, ev.clientY);
+  const cross = $("#live-cross");
+  const img = $("#live-img");
+  cross.style.display = "block";
+  cross.style.left = ev.clientX - img.getBoundingClientRect().left + img.offsetLeft + "px";
+  cross.style.top = ev.clientY - img.getBoundingClientRect().top + img.offsetTop + "px";
   try {
-    const r = await api("/api/browser/live/key", { method: "POST", body: { key: "Enter" } });
-    if (r.title != null) $("#page-title").textContent = r.title || "";
-  } catch (e) {
-    toast(e.message, "err");
-  }
-});
-$("#btn-send-tab").addEventListener("click", async () => {
-  try {
-    await api("/api/browser/live/key", { method: "POST", body: { key: "Tab" } });
-  } catch (e) {
-    toast(e.message, "err");
-  }
-});
-$("#btn-clear-input").addEventListener("click", async () => {
-  try {
-    await api("/api/browser/live/clear", { method: "POST", body: {} });
+    await api("/api/browser/live/click", { method: "POST", body: { x, y } });
+    await refreshLiveFrame();
   } catch (e) {
     toast(e.message, "err");
   }
 });
 
-$("#auto-shot").addEventListener("change", async (e) => {
-  try {
-    await api("/api/browser/screenshot/auto", { method: "POST", body: { enabled: e.target.checked } });
-    toast(e.target.checked ? "已开启自动截图" : "已关闭自动截图");
-  } catch (err) {
-    toast(err.message, "err");
-  }
-});
+$("#live-stage").addEventListener(
+  "wheel",
+  (ev) => {
+    if (!state.liveReady) return;
+    ev.preventDefault();
+    api("/api/browser/live/wheel", {
+      method: "POST",
+      body: { dx: ev.deltaX, dy: ev.deltaY },
+    }).catch(() => {});
+  },
+  { passive: false }
+);
 
-$("#btn-shot").addEventListener("click", async () => {
+// 键盘直操（对齐浏览器）
+const keyMapSpecial = {
+  Enter: "Enter",
+  Tab: "Tab",
+  Backspace: "Backspace",
+  Escape: "Escape",
+  ArrowUp: "ArrowUp",
+  ArrowDown: "ArrowDown",
+  ArrowLeft: "ArrowLeft",
+  ArrowRight: "ArrowRight",
+  Delete: "Delete",
+};
+
+$("#live-stage").addEventListener("keydown", async (ev) => {
+  if (!state.liveReady) return;
+  // 允许 Ctrl+R 等不劫持刷新页面本体
+  if (ev.ctrlKey && ["r", "R"].includes(ev.key)) return;
+  ev.preventDefault();
   try {
-    const r = await api("/api/browser/screenshot", { method: "POST", body: { tag: "manual" } });
-    await loadShots();
-    toast("已截图 " + (r.file || ""), "ok");
+    if (keyMapSpecial[ev.key]) {
+      await api("/api/browser/live/press", { method: "POST", body: { key: keyMapSpecial[ev.key] } });
+    } else if (ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey) {
+      await api("/api/browser/live/insert", { method: "POST", body: { text: ev.key } });
+    } else if (ev.ctrlKey && ["a", "A", "c", "C", "v", "V", "x", "X"].includes(ev.key)) {
+      const m = { a: "Control+a", c: "Control+c", v: "Control+v", x: "Control+x" };
+      await api("/api/browser/live/press", { method: "POST", body: { key: m[ev.key.toLowerCase()] } });
+    }
+    await refreshLiveFrame();
   } catch (e) {
-    toast(e.message, "err");
-  }
-});
-
-/* ================= 截图（仅记录） ================= */
-async function loadShots() {
-  try {
-    const r = await api("/api/browser/shots");
-    state.shots = r.shots || [];
-  } catch {
     /* ignore */
   }
+});
+
+/* --- 右键菜单 --- */
+function hideCtx() {
+  $("#ctx-menu").classList.add("hidden");
 }
 
-/* 元素框叠在实时镜像上，保证点选对应 */
+function showCtx(x, y, items) {
+  const menu = $("#ctx-menu");
+  menu.innerHTML = items
+    .map((it, i) => `<button data-i="${i}">${esc(it.label)}</button>`)
+    .join("");
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+  menu.classList.remove("hidden");
+  menu.querySelectorAll("button").forEach((b) => {
+    b.addEventListener("click", () => {
+      hideCtx();
+      const it = items[Number(b.dataset.i)];
+      if (it && it.onClick) it.onClick();
+    });
+  });
+}
+
+$("#live-stage").addEventListener("contextmenu", (ev) => {
+  ev.preventDefault();
+  const stage = $("#live-stage");
+  const rect = stage.getBoundingClientRect();
+  const lx = ev.clientX - rect.left + stage.scrollLeft;
+  const ly = ev.clientY - rect.top + stage.scrollTop;
+
+  // 命中识别框？
+  const hit = ev.target.closest && ev.target.closest(".shot-rect");
+  if (hit) {
+    const elId = hit.dataset.elId;
+    showCtx(lx, ly, [
+      {
+        label: "取消该识别框",
+        onClick: async () => {
+          const el = state.elements.find((x) => x.id === elId);
+          if (el) el.marked = false;
+          if (state.marked.some((m) => m.id === elId)) await unmarkElement(elId, true);
+          // 从树挂载中移除
+          for (const n of state.tree) {
+            if (n.element_ids && n.element_ids.includes(elId)) {
+              await api(`/api/browser/tree/node/${n.id}`, {
+                method: "PUT",
+                body: { element_ids: n.element_ids.filter((x) => x !== elId) },
+              });
+            }
+          }
+          await loadTree();
+          renderElements();
+          drawGhost();
+          toast("已取消识别框");
+        },
+      },
+      {
+        label: "标为功能点树节点…",
+        onClick: () => openMarkAs(elId),
+      },
+    ]);
+    return;
+  }
+
+  const items = [
+    {
+      label: "手动添加功能点到当前节点",
+      onClick: () => {
+        const name = prompt("功能点名称", "手动功能点");
+        if (!name) return;
+        const parent = state.selectedNodeId;
+        api("/api/browser/tree/node", {
+          method: "POST",
+          body: { name, node_type: "point", parent_id: parent },
+        }).then(() => {
+          loadTree();
+          toast("已添加功能点");
+        });
+      },
+    },
+    {
+      label: "添加一级目录（/ 占位可改）",
+      onClick: () => {
+        const name = prompt("一级目录名称（可填 /）", "/");
+        if (name == null) return;
+        api("/api/browser/tree/node", {
+          method: "POST",
+          body: { name: name || "/", node_type: "title1", parent_id: state.selectedNodeId },
+        }).then(() => loadTree());
+      },
+    },
+    {
+      label: "此处截图",
+      onClick: () => $("#btn-shot").click(),
+    },
+  ];
+  showCtx(lx, ly, items);
+});
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#ctx-menu")) hideCtx();
+});
+
+/* ================= 叠框 ================= */
 function drawGhost() {
   const img = $("#live-img");
-  if (!img || !img.clientWidth) return;
+  if (!img || !img.clientWidth || $("#live-frame").classList.contains("hidden")) return;
   let ghost = $("#live-overlay");
   if (!ghost) {
     ghost = document.createElement("div");
@@ -290,70 +466,31 @@ function drawGhost() {
 $("#live-img").addEventListener("load", drawGhost);
 window.addEventListener("resize", drawGhost);
 
-// 点表格行 → 镜像上高亮对应框
 function highlightEl(id) {
   document.querySelectorAll(".shot-rect").forEach((r) => {
     r.classList.toggle("hover", r.dataset.elId === id);
   });
 }
 
-/* ================= 元素发现 ================= */
-$("#btn-extract").addEventListener("click", async () => {
-  try {
-    const r = await api("/api/browser/extract", { method: "POST", body: {} });
-    state.elements = r.elements || [];
-    state.frameTree = r.frame_tree || [];
-    $("#page-title").textContent = r.title || r.url || "";
-    renderFrameOptions();
-    renderElements();
-    await loadShots();
-    drawGhost();
-    toast(`发现 ${state.elements.length} 个交互元素（含 ${r.counts?.frames || 1} 个 frame）`, "ok");
-  } catch (e) {
-    toast(e.message, "err");
-  }
-});
-
-function renderFrameOptions() {
-  const sel = $("#el-frame");
-  const paths = new Set([""]);
-  const walk = (nodes) => {
-    for (const n of nodes || []) {
-      paths.add(n.path);
-      walk(n.children);
-    }
-  };
-  walk(state.frameTree);
-  sel.innerHTML = `<option value="">全部 frame</option>` +
-    Array.from(paths).filter(Boolean).map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
-}
-
+/* ================= 元素 ================= */
 function renderElements() {
   const tb = $("#el-table tbody");
   const q = ($("#el-filter").value || "").toLowerCase();
   const kind = $("#el-kind").value;
-  const frame = $("#el-frame").value;
-
   const rows = state.elements.filter((e) => {
     if (kind && e.kind !== kind) return false;
-    if (frame && e.frame_path !== frame) return false;
     if (!q) return true;
-    return `${e.name} ${e.text} ${e.selector} ${e.tag}`.toLowerCase().includes(q);
+    return `${e.name} ${e.text} ${e.selector}`.toLowerCase().includes(q);
   });
 
-  $("#el-count").textContent = `${state.elements.length} 个元素，显示 ${rows.length}`;
   tb.innerHTML = rows
     .map(
       (e) => `
     <tr data-id="${e.id}">
       <td><input type="checkbox" class="el-check" data-id="${e.id}" ${e.marked ? "checked" : ""} /></td>
       <td><span class="tag">${esc(e.kind_label || e.kind)}</span></td>
-      <td>
-        <div class="name">${esc(e.name || e.text || "—")}</div>
-        <div class="url">${esc((e.attrs && (e.attrs.placeholder || e.attrs.type)) || "")}</div>
-      </td>
+      <td>${esc(e.name || e.text || "—")}</td>
       <td class="url">${esc(e.selector)}</td>
-      <td class="url">${esc(e.frame_path || "main")}</td>
       <td>
         <button class="link-btn" data-act="mark-as" data-id="${e.id}">标记为…</button>
         <button class="link-btn" data-act="attach" data-id="${e.id}">挂到当前</button>
@@ -361,18 +498,6 @@ function renderElements() {
     </tr>`
     )
     .join("");
-
-  // 全选框状态
-  const allCb = $("#el-select-all");
-  if (allCb) {
-    const visible = rows.map((r) => r.id);
-    const checkedN = visible.filter((id) => {
-      const el = state.elements.find((x) => x.id === id);
-      return el && el.marked;
-    }).length;
-    allCb.checked = visible.length > 0 && checkedN === visible.length;
-    allCb.indeterminate = checkedN > 0 && checkedN < visible.length;
-  }
 
   tb.querySelectorAll("button[data-act=mark-as]").forEach((btn) => {
     btn.addEventListener("click", () => openMarkAs(btn.dataset.id));
@@ -382,34 +507,35 @@ function renderElements() {
   });
   tb.querySelectorAll(".el-check").forEach((cb) => {
     cb.addEventListener("change", () => {
-      if (cb.checked) markElement(cb.dataset.id);
-      else unmarkElement(cb.dataset.id);
+      if (cb.checked) markElement(cb.dataset.id, true);
+      else unmarkElement(cb.dataset.id, true);
     });
   });
-  // 表格悬停 → 镜像框高亮
   tb.querySelectorAll("tr[data-id]").forEach((tr) => {
     tr.addEventListener("mouseenter", () => highlightEl(tr.dataset.id));
     tr.addEventListener("mouseleave", () => highlightEl(""));
   });
+
+  const allCb = $("#el-select-all");
+  if (allCb) {
+    const visible = rows.map((r) => r.id);
+    const n = visible.filter((id) => state.elements.find((x) => x.id === id)?.marked).length;
+    allCb.checked = visible.length > 0 && n === visible.length;
+    allCb.indeterminate = n > 0 && n < visible.length;
+  }
 }
 
-// 全选 / 全不选 / 批量挂载
+$("#el-filter").addEventListener("input", renderElements);
+$("#el-kind").addEventListener("change", renderElements);
+
 $("#el-select-all").addEventListener("change", (e) => {
-  const boxes = $$("#el-table .el-check");
-  boxes.forEach((cb) => {
+  $$("#el-table .el-check").forEach((cb) => {
     cb.checked = e.target.checked;
-    const id = cb.dataset.id;
-    const el = state.elements.find((x) => x.id === id);
-    if (el) el.marked = e.target.checked;
+    if (e.target.checked) markElement(cb.dataset.id, true);
+    else unmarkElement(cb.dataset.id, true);
   });
-  if (e.target.checked) {
-    boxes.forEach((cb) => markElement(cb.dataset.id));
-  } else {
-    boxes.forEach((cb) => unmarkElement(cb.dataset.id));
-  }
   renderElements();
 });
-
 $("#btn-sel-all").addEventListener("click", () => {
   $("#el-select-all").checked = true;
   $("#el-select-all").dispatchEvent(new Event("change"));
@@ -418,23 +544,30 @@ $("#btn-sel-none").addEventListener("click", () => {
   $("#el-select-all").checked = false;
   $("#el-select-all").dispatchEvent(new Event("change"));
 });
-
 $("#btn-mark-selected").addEventListener("click", async () => {
   const ids = $$("#el-table .el-check:checked").map((x) => x.dataset.id);
-  if (!ids.length) return toast("请先勾选元素", "err");
-  if (!state.selectedNodeId) {
-    toast("请在左侧选中树节点（功能点）后再挂载", "err");
-    return;
-  }
+  if (!ids.length) return toast("请勾选元素", "err");
+  if (!state.selectedNodeId) return toast("请选中树节点", "err");
   for (const id of ids) await markElement(id, true);
-  toast(`已挂到当前功能点 ${ids.length} 个`, "ok");
   await loadTree();
   selectNode(state.selectedNodeId);
+  toast(`已挂载 ${ids.length} 个`, "ok");
 });
 
-$("#el-filter").addEventListener("input", renderElements);
-$("#el-kind").addEventListener("change", renderElements);
-$("#el-frame").addEventListener("change", renderElements);
+$("#btn-extract").addEventListener("click", async () => {
+  try {
+    await ensureBrowser();
+    const r = await api("/api/browser/extract", { method: "POST", body: {} });
+    state.elements = r.elements || [];
+    state.frameTree = r.frame_tree || [];
+    renderElements();
+    drawGhost();
+    await loadShotList();
+    toast(`发现 ${state.elements.length} 个元素`, "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
 
 async function markElement(elId, quiet = false) {
   const el = state.elements.find((x) => x.id === elId);
@@ -445,22 +578,36 @@ async function markElement(elId, quiet = false) {
     if (idx >= 0) state.elements[idx] = { ...state.elements[idx], ...r.element, marked: true };
     await loadMarked();
     drawGhost();
-    if (state.selectedNodeId) {
-      await attachElToNode(state.selectedNodeId, r.element.id);
-    }
-    if (!quiet) toast("已标为功能点", "ok");
+    if (state.selectedNodeId) await attachElToNode(state.selectedNodeId, r.element.id);
+    if (!quiet) toast("已标记", "ok");
   } catch (e) {
     if (!quiet) toast(e.message, "err");
   }
 }
 
-async function unmarkElement(elId) {
+async function unmarkElement(elId, quiet = false) {
   try {
     await api(`/api/browser/unmark/${elId}`, { method: "POST", body: {} });
+    const idx = state.elements.findIndex((x) => x.id === elId);
+    if (idx >= 0) state.elements[idx] = { ...state.elements[idx], marked: false };
     await loadMarked();
+    drawGhost();
+    if (!quiet) toast("已取消");
   } catch (e) {
-    toast(e.message, "err");
+    if (!quiet) toast(e.message, "err");
   }
+}
+
+async function attachElToNode(nodeId, elId) {
+  const n = state.tree.find((x) => x.id === nodeId);
+  if (!n) return;
+  const ids = new Set(n.element_ids || []);
+  ids.add(elId);
+  await api(`/api/browser/tree/node/${nodeId}`, {
+    method: "PUT",
+    body: { element_ids: Array.from(ids) },
+  });
+  await loadTree();
 }
 
 async function loadMarked() {
@@ -468,31 +615,22 @@ async function loadMarked() {
     const r = await api("/api/browser/marked");
     state.marked = r.elements || [];
     $("#marked-count").textContent = String(state.marked.length);
-    $("#marked-list").innerHTML = state.marked
-      .map(
-        (e) => `
+    $("#marked-list").innerHTML =
+      state.marked
+        .map(
+          (e) => `
       <div class="marked-item" data-id="${e.id}">
         <div><b>${esc(e.name || e.text || e.kind)}</b> <span class="k">${esc(e.kind)}</span></div>
         <div class="k">${esc(e.selector)}</div>
-        <div class="k">${esc(e.frame_path || "main")}</div>
         <div class="row">
-          <input data-id="${e.id}" class="mk-note" placeholder="备注" value="${esc(e.note || "")}" />
           <button class="mini" data-act="un" data-id="${e.id}">取消</button>
         </div>
       </div>`
-      )
-      .join("") || `<div class="muted">尚未标记元素。在表格点「标记为…」可建模块/目录/功能点。</div>`;
+        )
+        .join("") || `<div class="muted">尚未标记。表格「标记为…」可建树节点。</div>`;
 
     $("#marked-list").querySelectorAll("button[data-act=un]").forEach((b) => {
       b.addEventListener("click", () => unmarkElement(b.dataset.id));
-    });
-    $("#marked-list").querySelectorAll(".mk-note").forEach((inp) => {
-      inp.addEventListener("change", async () => {
-        await api(`/api/browser/marked/${inp.dataset.id}`, {
-          method: "PUT",
-          body: { note: inp.value },
-        });
-      });
     });
     drawGhost();
   } catch {
@@ -501,6 +639,19 @@ async function loadMarked() {
 }
 
 /* ================= 树 ================= */
+function pathNames(id) {
+  const by = Object.fromEntries(state.tree.map((n) => [n.id, n]));
+  const chain = [];
+  let cur = by[id];
+  let g = 0;
+  while (cur && g < 20) {
+    chain.unshift(cur.name);
+    cur = by[cur.parent_id];
+    g++;
+  }
+  return chain.join(" / ");
+}
+
 function renderTree() {
   const byParent = {};
   for (const n of state.tree) {
@@ -515,14 +666,6 @@ function renderTree() {
     point: "功能点",
     case: "验证",
   };
-  const typeCls = {
-    module: "module",
-    title1: "title1",
-    title2: "title2",
-    title3: "title3",
-    point: "point",
-    case: "case",
-  };
 
   function nodeHtml(n) {
     const kids = byParent[n.id] || [];
@@ -530,22 +673,21 @@ function renderTree() {
     const stCls = st === "pass" ? "st-pass" : st === "fail" ? "st-fail" : "";
     return `
       <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}">
-        <span class="badge-sm ${typeCls[n.node_type] || ""}">${typeLabel[n.node_type] || n.node_type}</span>
+        <span class="badge-sm ${n.node_type}">${typeLabel[n.node_type] || n.node_type}</span>
         <span class="nm">${esc(n.name)}</span>
         <span class="${stCls}">${st === "pass" ? "✓" : st === "fail" ? "✗" : ""}</span>
       </div>
       ${kids.length ? `<div class="tree-children">${kids.map(nodeHtml).join("")}</div>` : ""}`;
   }
 
-  const roots = byParent[""] || byParent[null] || state.tree.filter((n) => !n.parent_id);
-  // 保持已有 parentId 为 null 的根
   const rootNodes = state.tree.filter((n) => !n.parent_id);
-  $("#tree").innerHTML = rootNodes.map(nodeHtml).join("") || `<div class="muted" style="padding:12px">空树。点「自动建功能点树」或手动添加。</div>`;
+  $("#tree").innerHTML =
+    rootNodes.map(nodeHtml).join("") ||
+    `<div class="muted" style="padding:12px">空树。「自动建树」或右键镜像添加。</div>`;
 
   $("#tree").querySelectorAll(".tree-node").forEach((el) => {
     el.addEventListener("click", () => selectNode(el.dataset.id));
     el.addEventListener("dblclick", () => openNodeEditor(el.dataset.id));
-    // 右键 = 编辑/移动
     el.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();
       openNodeEditor(el.dataset.id);
@@ -553,7 +695,35 @@ function renderTree() {
   });
 }
 
-/* ===== 树节点：编辑 / 移动 ===== */
+async function loadTree() {
+  try {
+    const r = await api("/api/browser/tree");
+    state.tree = r.tree || [];
+    renderTree();
+  } catch {
+    /* ignore */
+  }
+}
+
+function selectNode(id) {
+  state.selectedNodeId = id;
+  const n = state.tree.find((x) => x.id === id);
+  renderTree();
+  if (!n) return;
+  $("#sel-node-info").textContent = `${pathNames(id)} · ${n.status || "pending"}`;
+  $("#node-annotation").value = n.annotation || "";
+  const ids = new Set(n.element_ids || []);
+  document.querySelectorAll(".shot-rect").forEach((r) => {
+    r.classList.toggle("strong", ids.has(r.dataset.elId));
+    r.classList.toggle("hover", ids.has(r.dataset.elId));
+  });
+  // 节点关联截图详情入口
+  if (n.screenshot_id) {
+    const s = state.shots.find((x) => x.id === n.screenshot_id);
+    if (s) showShotDetail(s);
+  }
+}
+
 function descendantsOf(id) {
   const ids = new Set([id]);
   let changed = true;
@@ -573,37 +743,22 @@ function fillParentOptions(sel, excludeId, selectedParent) {
   const skip = excludeId ? descendantsOf(excludeId) : new Set();
   const rows = state.tree.filter((n) => !skip.has(n.id));
   sel.innerHTML =
-    `<option value="">（根 / 顶层）</option>` +
+    `<option value="">（顶层）</option>` +
     rows
       .map(
         (n) =>
-          `<option value="${n.id}" ${n.id === selectedParent ? "selected" : ""}>${"　".repeat(
-            Math.min(pathNames(n.id).split(" / ").length - 1, 6)
-          )}${esc(n.name)} · ${n.node_type}</option>`
+          `<option value="${n.id}" ${n.id === selectedParent ? "selected" : ""}>${esc(n.name)} · ${n.node_type}</option>`
       )
       .join("");
 }
 
 function openMarkAs(elId) {
-  const el = state.elements.find((x) => x.id === elId);
-  if (!el) return;
+  const el = state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId);
   $("#mka-el-id").value = elId;
-  $("#mka-name").value = el.name || el.text || "";
-  const typeSel = $("#mka-type");
-  // 默认：有选中节点则挂其下作功能点；否则作模块
+  $("#mka-name").value = el?.name || el?.text || "";
   const cur = state.tree.find((n) => n.id === state.selectedNodeId);
-  typeSel.value = cur && cur.node_type !== "module" ? "point" : cur ? "title1" : "module";
+  $("#mka-type").value = cur && cur.node_type !== "module" ? "point" : "module";
   fillParentOptions($("#mka-parent"), null, cur ? cur.id : "");
-  // 模块强制根
-  typeSel.onchange = () => {
-    if (typeSel.value === "module") {
-      $("#mka-parent").value = "";
-      $("#mka-parent").disabled = true;
-    } else {
-      $("#mka-parent").disabled = false;
-    }
-  };
-  typeSel.onchange();
   $("#modal-mark-as").classList.remove("hidden");
 }
 
@@ -614,14 +769,6 @@ function openNodeEditor(id) {
   $("#mn-name").value = n.name || "";
   $("#mn-type").value = n.node_type || "point";
   fillParentOptions($("#mn-parent"), id, n.parent_id || "");
-  if (n.node_type === "module") {
-    $("#mn-parent").value = "";
-    $("#mn-parent").disabled = true;
-    $("#mn-type").disabled = true;
-  } else {
-    $("#mn-parent").disabled = false;
-    $("#mn-type").disabled = false;
-  }
   $("#modal-node").classList.remove("hidden");
 }
 
@@ -630,35 +777,27 @@ $("#btn-close-node").addEventListener("click", () => $("#modal-node").classList.
 
 $("#btn-save-mark-as").addEventListener("click", async () => {
   const elId = $("#mka-el-id").value;
-  const el = state.elements.find((x) => x.id === elId);
+  const el = state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId);
   const node_type = $("#mka-type").value;
-  const name = ($("#mka-name").value || el?.name || el?.text || "节点").trim();
-  const parent_id = node_type === "module" ? "" : $("#mka-parent").value;
+  const name = ($("#mka-name").value || el?.name || "节点").trim();
+  const parent_id = node_type === "module" ? null : $("#mka-parent").value || null;
   try {
-    // 先确保元素已标记
-    let marked = state.marked.find((m) => m.id === elId) || el;
-    if (el && !el.marked) {
-      const r = await api("/api/browser/mark", { method: "POST", body: { element: el } });
-      marked = r.element;
-      const idx = state.elements.findIndex((x) => x.id === elId);
-      if (idx >= 0) state.elements[idx] = { ...state.elements[idx], ...marked, marked: true };
-      await loadMarked();
-    }
+    if (el && !el.marked && elId) await markElement(elId, true);
     const r = await api("/api/browser/tree/node", {
       method: "POST",
       body: {
         name,
         node_type,
-        parent_id: parent_id || null,
-        url: el?.page_url || el?.url || "",
-        element_ids: marked?.id ? [marked.id] : [],
+        parent_id,
+        url: el?.page_url || "",
+        element_ids: elId ? [elId] : [],
       },
     });
     $("#modal-mark-as").classList.add("hidden");
     await loadTree();
     selectNode(r.node.id);
     drawGhost();
-    toast(`已标为「${node_type}」：${name}`, "ok");
+    toast(`已标为 ${node_type}：${name}`, "ok");
     renderElements();
   } catch (e) {
     toast(e.message, "err");
@@ -668,115 +807,52 @@ $("#btn-save-mark-as").addEventListener("click", async () => {
 $("#btn-save-node").addEventListener("click", async () => {
   const id = $("#mn-id").value;
   const node_type = $("#mn-type").value;
-  const payload = {
-    name: $("#mn-name").value.trim(),
-    node_type,
-    parent_id: node_type === "module" ? null : $("#mn-parent").value || null,
-  };
   try {
-    await api(`/api/browser/tree/node/${id}`, { method: "PUT", body: payload });
+    await api(`/api/browser/tree/node/${id}`, {
+      method: "PUT",
+      body: {
+        name: $("#mn-name").value.trim(),
+        node_type,
+        parent_id: node_type === "module" ? null : $("#mn-parent").value || null,
+      },
+    });
     $("#modal-node").classList.add("hidden");
     await loadTree();
     selectNode(id);
-    toast("节点已更新", "ok");
+    toast("已更新", "ok");
   } catch (e) {
     toast(e.message, "err");
   }
 });
 
 $("#btn-del-node").addEventListener("click", async () => {
-  const id = $("#mn-id").value;
-  if (!confirm("删除该节点及其子节点？")) return;
+  if (!confirm("删除节点及其子节点？")) return;
   try {
-    await api(`/api/browser/tree/node/${id}`, { method: "DELETE" });
+    await api(`/api/browser/tree/node/${$("#mn-id").value}`, { method: "DELETE" });
     $("#modal-node").classList.add("hidden");
-    state.selectedNodeId = null;
     await loadTree();
-    toast("已删除", "ok");
   } catch (e) {
     toast(e.message, "err");
   }
 });
 
-async function loadTree() {
-  try {
-    const r = await api("/api/browser/tree");
-    state.tree = r.tree || [];
-    renderTree();
-  } catch {
-    /* ignore */
-  }
-}
-
-function selectNode(id) {
-  state.selectedNodeId = id;
-  const n = state.tree.find((x) => x.id === id);
-  renderTree();
-  if (!n) return;
-  const names = pathNames(id);
-  $("#sel-node-info").textContent = `${names} · ${n.status || "pending"}`;
-  $("#node-annotation").value = n.annotation || "";
-  // 高亮该节点挂载的元素
-  const ids = new Set(n.element_ids || []);
-  document.querySelectorAll(".shot-rect").forEach((r) => {
-    r.classList.toggle("strong", ids.has(r.dataset.elId));
-    r.classList.toggle("hover", ids.has(r.dataset.elId));
-  });
-}
-
-function pathNames(id) {
-  const by = Object.fromEntries(state.tree.map((n) => [n.id, n]));
-  const chain = [];
-  let cur = by[id];
-  let g = 0;
-  while (cur && g < 20) {
-    chain.unshift(cur.name);
-    cur = by[cur.parent_id];
-    g++;
-  }
-  return chain.join(" / ");
-}
-
-async function attachElToNode(nodeId, elId) {
-  try {
-    const n = state.tree.find((x) => x.id === nodeId);
-    if (!n) return;
-    const ids = new Set(n.element_ids || []);
-    ids.add(elId);
-    await api(`/api/browser/tree/node/${nodeId}`, {
-      method: "PUT",
-      body: { element_ids: Array.from(ids) },
-    });
-    await loadTree();
-    selectNode(nodeId);
-  } catch {
-    /* ignore */
-  }
-}
-
 $("#btn-add-module").addEventListener("click", async () => {
-  const name = prompt("模块名称", "测试模块");
-  if (!name) return;
+  const name = prompt("模块名称", "模块") || "模块";
   await api("/api/browser/tree/node", { method: "POST", body: { name, node_type: "module" } });
   await loadTree();
 });
-
 $("#btn-add-title").addEventListener("click", async () => {
-  const lvl = prompt("目录层级：1=一级 2=二级 3=三级", "1");
-  if (!lvl) return;
+  const lvl = prompt("层级 1/2/3", "1");
   const map = { "1": "title1", "2": "title2", "3": "title3" };
-  const node_type = map[lvl] || "title1";
-  const name = prompt("目录名称（缺省请填 /）", "/") || "/";
+  const name = prompt("目录名（可填 /）", "/") || "/";
   await api("/api/browser/tree/node", {
     method: "POST",
-    body: { name, node_type, parent_id: state.selectedNodeId },
+    body: { name, node_type: map[lvl] || "title1", parent_id: state.selectedNodeId },
   });
   await loadTree();
 });
-
 $("#btn-add-point").addEventListener("click", async () => {
-  const name = prompt("功能点名称", "查询功能");
-  if (!name) return;
+  const name = prompt("功能点名称", "功能点") || "功能点";
   await api("/api/browser/tree/node", {
     method: "POST",
     body: { name, node_type: "point", parent_id: state.selectedNodeId },
@@ -785,16 +861,17 @@ $("#btn-add-point").addEventListener("click", async () => {
 });
 
 $("#btn-auto-tree").addEventListener("click", async () => {
-  const module_name = prompt("模块名称", "核心业务") || "核心业务";
   try {
-    const r = await api("/api/browser/discover-tree", { method: "POST", body: { module_name } });
+    const r = await api("/api/browser/discover-tree", {
+      method: "POST",
+      body: { module_name: $("#project-name").value || "核心业务" },
+    });
     state.tree = r.tree || [];
     state.elements = r.elements || state.elements;
-    state.frameTree = r.frame_tree || state.frameTree;
     renderTree();
-    renderFrameOptions();
     renderElements();
-    toast(`自动建树完成：${state.tree.length} 节点`, "ok");
+    drawGhost();
+    toast(`建树完成 ${state.tree.length} 节点`, "ok");
   } catch (e) {
     toast(e.message, "err");
   }
@@ -802,7 +879,7 @@ $("#btn-auto-tree").addEventListener("click", async () => {
 
 /* 判定 */
 async function setStatus(st) {
-  if (!state.selectedNodeId) return toast("请先选中树节点", "err");
+  if (!state.selectedNodeId) return toast("请选中树节点", "err");
   try {
     await api(`/api/browser/tree/node/${state.selectedNodeId}/status`, {
       method: "POST",
@@ -810,7 +887,7 @@ async function setStatus(st) {
     });
     await loadTree();
     selectNode(state.selectedNodeId);
-    toast("已更新判定: " + st, st === "fail" ? "err" : "ok");
+    toast("判定：" + st);
   } catch (e) {
     toast(e.message, "err");
   }
@@ -819,7 +896,6 @@ $("#btn-pass").addEventListener("click", () => setStatus("pass"));
 $("#btn-fail").addEventListener("click", () => setStatus("fail"));
 $("#btn-pending").addEventListener("click", () => setStatus("pending"));
 $("#btn-ignore").addEventListener("click", () => setStatus("ignored"));
-
 $("#node-annotation").addEventListener("change", async () => {
   if (!state.selectedNodeId) return;
   await api(`/api/browser/tree/node/${state.selectedNodeId}`, {
@@ -828,7 +904,84 @@ $("#node-annotation").addEventListener("change", async () => {
   });
 });
 
+/* ================= 截图库 ================= */
+async function loadShotList() {
+  try {
+    // 优先项目内 shots
+    let shots = [];
+    if (state.projectId) {
+      const p = await api(`/api/projects/${state.projectId}`);
+      shots = p.project.shots || [];
+      $("#shot-dir").textContent = `存储目录：${p.project.shots_dir || ""}`;
+    } else {
+      const r = await api("/api/browser/shots");
+      shots = r.shots || [];
+      $("#shot-dir").textContent = "存储目录：data/output/shots";
+    }
+    state.shots = shots;
+    $("#shot-list").innerHTML =
+      shots
+        .slice(-30)
+        .reverse()
+        .map(
+          (s) => `
+      <div class="shot-item" data-id="${s.id}">
+        <img src="/api/browser/shot-file/${encodeURIComponent(s.file || s.id + ".png")}" alt="" />
+        <div class="p">${esc(s.tag || "")} · ${new Date((s.time || 0) * 1000).toLocaleString()}<br/>${esc(s.path || s.file || "")}</div>
+      </div>`
+        )
+        .join("") || `<div class="muted">暂无截图</div>`;
+
+    $("#shot-list").querySelectorAll(".shot-item").forEach((el) => {
+      el.addEventListener("click", () => {
+        const s = shots.find((x) => x.id === el.dataset.id);
+        if (s) showShotDetail(s);
+      });
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+function showShotDetail(s) {
+  $("#shot-detail-path").textContent = `路径：${s.path || s.file || ""}`;
+  $("#shot-detail-img").src = `/api/browser/shot-file/${encodeURIComponent(s.file || s.id + ".png")}`;
+  $("#modal-shot").classList.remove("hidden");
+}
+$("#btn-close-shot").addEventListener("click", () => $("#modal-shot").classList.add("hidden"));
+
+$("#auto-shot").addEventListener("change", async (e) => {
+  await api("/api/browser/screenshot/auto", { method: "POST", body: { enabled: e.target.checked } });
+});
+
+$("#btn-shot").addEventListener("click", async () => {
+  try {
+    await ensureBrowser();
+    const r = await api("/api/browser/screenshot", { method: "POST", body: { tag: "manual" } });
+    // 绑到当前节点
+    if (state.selectedNodeId) {
+      await api(`/api/browser/tree/node/${state.selectedNodeId}`, {
+        method: "PUT",
+        body: { screenshot_id: r.id, screenshot_path: r.path },
+      });
+      await loadTree();
+    }
+    await loadShotList();
+    showShotDetail(r);
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
+
 /* ================= 用例 ================= */
+function renderPreview(r) {
+  const titles = r.titles || [];
+  $("#case-preview").innerHTML =
+    titles
+      .map((t) => `<div class="t"><b>${esc(t.title)}</b><br><span class="muted">${esc(t.module)} · ${t.priority}</span></div>`)
+      .join("") || "暂无用例";
+}
+
 $("#btn-preview").addEventListener("click", async () => {
   try {
     const r = await api("/api/browser/tree/preview-cases", {
@@ -841,48 +994,36 @@ $("#btn-preview").addEventListener("click", async () => {
   }
 });
 
-function renderPreview(r) {
-  const titles = r.titles || [];
-  $("#case-preview").innerHTML =
-    titles.map((t) => `<div class="t"><b>${esc(t.title)}</b><br><span class="muted">${esc(t.module)} · ${t.priority}</span></div>`).join("") ||
-    "暂无用例";
-  toast(`预览 ${r.count || titles.length} 条`, "ok");
-}
-
 $("#btn-build-cases").addEventListener("click", async () => {
   try {
     const r = await api("/api/browser/cases/from-tree", {
       method: "POST",
-      body: {
-        extra: { include_negative: true, include_auth_cases: true, max_cases_per_point: 8 },
-      },
+      body: { extra: { include_negative: true, include_auth_cases: true } },
     });
     state.sessionId = r.session_id;
-    renderPreview({ titles: r.cases.map((c) => ({ title: c.title, module: c.module, priority: c.priority })), count: r.count });
-    toast(`已生成 ${r.count} 条并入库`, "ok");
+    renderPreview({
+      titles: r.cases.map((c) => ({ title: c.title, module: c.module, priority: c.priority })),
+    });
+    toast(`已生成 ${r.count} 条`, "ok");
   } catch (e) {
     toast(e.message, "err");
   }
 });
 
 $("#btn-export").addEventListener("click", async () => {
-  if (!state.sessionId) {
-    toast("请先点「生成入库」", "err");
-    return;
-  }
+  if (!state.sessionId) return toast("请先生成入库", "err");
   try {
     const r = await api("/api/export", {
       method: "POST",
       body: { session_id: state.sessionId, format: "xlsx" },
     });
     const name = r.path.split(/[\\/]/).pop();
-    toast("导出成功: " + name, "ok");
     window.open(`/api/export/download/${encodeURIComponent(name)}`, "_blank");
+    toast("已导出 " + name, "ok");
   } catch (e) {
     toast(e.message, "err");
   }
 });
-
 $("#btn-go-cases").addEventListener("click", () => $("#btn-build-cases").click());
 
 /* ================= 配置 ================= */
@@ -894,7 +1035,6 @@ $("#btn-config").addEventListener("click", async () => {
     $("#cfg-model").value = cfg.ai?.model || "";
     $("#cfg-vision").value = cfg.ai?.vision_model || "";
     $("#cfg-temp").value = cfg.ai?.temperature ?? 0.3;
-    $("#cfg-key").placeholder = cfg.ai?.api_key ? "已配置" : "sk-...";
     $("#modal-config").classList.remove("hidden");
   } catch (e) {
     toast(e.message, "err");
@@ -930,10 +1070,11 @@ $("#btn-save-config-disk").addEventListener("click", async () => {
   }
 });
 
-/* 初始化 */
+/* init */
 refreshStatus();
-loadShots();
+loadProjectList();
 loadMarked();
 loadTree();
+loadShotList();
 startLive();
 loadLiveMeta();

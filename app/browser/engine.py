@@ -347,6 +347,33 @@ class BrowserEngine:
 
         return self._call(_inner, timeout=15)
 
+    def live_insert_text(self, text: str) -> dict:
+        """向焦点输入文本（镜像内直接打字）。"""
+
+        def _inner() -> dict:
+            page = self._require_page()
+            if text:
+                page.keyboard.insert_text(text)
+            return {"url": page.url}
+
+        return self._call(_inner, timeout=15)
+
+    def live_press(self, key: str) -> dict:
+        def _inner() -> dict:
+            page = self._require_page()
+            page.keyboard.press(key)
+            return {"url": page.url}
+
+        return self._call(_inner, timeout=10)
+
+    def live_wheel(self, dx: float, dy: float) -> dict:
+        def _inner() -> dict:
+            page = self._require_page()
+            page.mouse.wheel(float(dx), float(dy))
+            return {"url": page.url}
+
+        return self._call(_inner, timeout=10)
+
     def live_clear_focus(self) -> dict:
         def _inner() -> dict:
             page = self._require_page()

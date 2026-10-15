@@ -16,6 +16,7 @@ from .ai.generator import generate_test_cases
 from .discovery import discover_functional_points
 from .export import export_cases
 from .routes_browser import router as browser_router
+from .routes_browser import projects_router
 from .models import (
     CaseUpdate,
     DiscoverRequest,
@@ -39,6 +40,7 @@ app = FastAPI(
 )
 
 app.include_router(browser_router)
+app.include_router(projects_router)
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

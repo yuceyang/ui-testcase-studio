@@ -1,0 +1,24 @@
+{
+  "id": "prj_73b319cd60",
+  "name": "siansec2",
+  "base_url": "https://example.com/",
+  "created_at": 1792077296.3062494,
+  "updated_at": 1792077314.5443738,
+  "tree": [],
+  "marked_elements": [],
+  "notes": [],
+  "shots": [
+    {
+      "id": "shot_a92bce7a51",
+      "tag": "auto",
+      "url": "https://example.com/",
+      "title": "Example Domain",
+      "path": "E:\\ModelSpace\\XiaomiMiMo\\XiaomiMiMoProjects\\.mimo-sessions\\2026\\10\\15\\cookie\\data\\output\\shots\\shot_a92bce7a51.png",
+      "file": "shot_a92bce7a51.png",
+      "time": 1792077280.007694
+    }
+  ],
+  "cases": [],
+  "meta": {},
+  "last_url": "https://example.com/"
+}

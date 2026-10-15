@@ -142,10 +142,29 @@ def live_type(payload: dict):
     return _run(lambda eng: _ok(**eng.live_type(text)))
 
 
+@router.post("/live/insert")
+def live_insert(payload: dict):
+    text = (payload or {}).get("text") or ""
+    return _run(lambda eng: _ok(**eng.live_insert_text(text)))
+
+
 @router.post("/live/key")
 def live_key(payload: dict):
     key = (payload or {}).get("key") or "Enter"
     return _run(lambda eng: _ok(**eng.live_key(key)))
+
+
+@router.post("/live/press")
+def live_press(payload: dict):
+    key = (payload or {}).get("key") or "Enter"
+    return _run(lambda eng: _ok(**eng.live_press(key)))
+
+
+@router.post("/live/wheel")
+def live_wheel(payload: dict):
+    dx = float((payload or {}).get("dx") or 0)
+    dy = float((payload or {}).get("dy") or 0)
+    return _run(lambda eng: _ok(**eng.live_wheel(dx, dy)))
 
 
 @router.post("/live/clear")
@@ -396,4 +415,118 @@ def cases_from_tree(payload: dict):
         "session_id": sid,
         "count": len(cases),
         "cases": [c.model_dump() for c in cases],
+    }
+
+
+# ---------- 项目管理 ----------
+from .projects import store as project_store  # noqa: E402
+
+projects_router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+@projects_router.get("")
+def list_projects():
+    return {"ok": True, "projects": project_store.list_projects()}
+
+
+@projects_router.post("")
+def create_project(payload: dict):
+    name = (payload or {}).get("name") or "未命名项目"
+    base_url = (payload or {}).get("base_url") or ""
+    data = project_store.create(name, base_url)
+    return {"ok": True, "project": data}
+
+
+@projects_router.get("/{pid}")
+def get_project(pid: str):
+    data = project_store.load(pid)
+    if not data:
+        raise HTTPException(404, "项目不存在")
+    data = dict(data)
+    data["storage_path"] = str(project_store.path_of(pid, "storage_state.json"))
+    data["shots_dir"] = str(project_store.shots_dir(pid))
+    return {"ok": True, "project": data}
+
+
+@projects_router.put("/{pid}")
+def update_project(pid: str, payload: dict):
+    data = project_store.load(pid) or {"id": pid, "name": pid}
+    for k in ("name", "base_url", "tree", "marked_elements", "notes", "shots", "cases", "meta"):
+        if k in payload:
+            data[k] = payload[k]
+    saved = project_store.save(pid, data)
+    return {"ok": True, "project": saved}
+
+
+@projects_router.delete("/{pid}")
+def delete_project(pid: str):
+    return {"ok": True, "deleted": project_store.delete(pid)}
+
+
+@projects_router.post("/{pid}/save-from-engine")
+def save_from_engine(pid: str):
+    eng = get_engine()
+    saved = project_store.update_from_engine(pid, eng)
+    # 顺带保存登录态（必须在 Playwright 线程）
+    try:
+        if eng.is_running():
+            state = eng._call(lambda: eng._context.storage_state())
+            project_store.save_storage_state(pid, state)
+            saved["storage_saved"] = True
+    except Exception as e:  # noqa: BLE001
+        saved["storage_error"] = str(e)
+    return {"ok": True, "project": saved}
+
+
+@projects_router.post("/{pid}/load")
+def load_project(pid: str, payload: dict | None = None):
+    payload = payload or {}
+    data = project_store.load(pid)
+    if not data:
+        raise HTTPException(404, "项目不存在")
+    eng = get_engine()
+    eng.set_tree(data.get("tree") or [])
+    eng.marked_elements = data.get("marked_elements") or []
+    eng.notes = data.get("notes") or []
+    eng.shots = data.get("shots") or []
+
+    restored = False
+    if payload.get("restore_login", True):
+        state = project_store.load_storage_state(pid)
+        if state:
+            try:
+                if not eng.is_running():
+                    eng.start(headless=True)
+                cookies = state.get("cookies") or []
+
+                def _restore():
+                    if cookies:
+                        eng._context.add_cookies(cookies)
+                    page = eng._require_page()
+                    for origin in state.get("origins") or []:
+                        items = origin.get("localStorage") or []
+                        if not items:
+                            continue
+                        its = [{"name": i.get("name"), "value": i.get("value")} for i in items]
+                        page.evaluate(
+                            """(its) => {
+                                try {
+                                  for (const it of its) localStorage.setItem(it.name, it.value);
+                                } catch (e) {}
+                                return true;
+                            }""",
+                            its,
+                        )
+                    return True
+
+                eng._call(_restore)
+                restored = True
+            except Exception as e:  # noqa: BLE001
+                data["restore_error"] = str(e)
+    return {
+        "ok": True,
+        "project": data,
+        "restored_login": restored,
+        "tree_count": len(eng.get_tree()),
+        "marked_count": len(eng.list_marked()),
     }

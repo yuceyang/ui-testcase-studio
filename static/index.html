@@ -3,40 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>软件功能测试系统 · 查询用例生成</title>
+  <title>软件功能测试系统</title>
   <link rel="stylesheet" href="/static/css/app.css" />
   <link rel="stylesheet" href="/static/css/browser.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">QT</span>
-      <div>
-        <h1>软件功能测试系统</h1>
-        <p class="sub">功能点树 · 内置浏览器手动操作 · 只读查询用例</p>
-      </div>
+  <!-- 顶栏：项目 + 紧凑操作 -->
+  <header class="topbar slim">
+    <div class="brand slim-brand">
+      <b>QT</b>
+      <select id="project-select" title="项目"></select>
+      <button class="mini" id="btn-new-project">新建项目</button>
+      <button class="mini" id="btn-save-project">保存项目</button>
+      <button class="mini" id="btn-load-project">加载</button>
+      <input id="project-name" placeholder="项目名" style="width:140px;display:none" />
     </div>
     <div class="top-actions">
-      <span id="br-status" class="badge">浏览器未启动</span>
-      <button id="btn-config" class="btn ghost">模型配置</button>
+      <button id="btn-start" class="btn accent">启动浏览器</button>
+      <button id="btn-extract" class="btn">自动发现元素</button>
+      <button id="btn-auto-tree" class="btn">自动建树</button>
+      <button id="btn-go-cases" class="btn accent">生成用例</button>
+      <button id="btn-config" class="btn ghost">模型</button>
+      <span id="br-status" class="badge">未启动</span>
     </div>
   </header>
 
-  <div class="toolbar">
-    <div class="addr-group">
-      <button id="btn-back" class="btn" title="后退">←</button>
-      <button id="btn-reload" class="btn" title="刷新">⟳</button>
-      <input id="addr-url" type="text" placeholder="https://目标系统地址，在视图内手动登录" spellcheck="false" />
-      <button id="btn-go" class="btn primary">前往</button>
-    </div>
-    <button id="btn-start" class="btn accent">启动浏览器</button>
-    <button id="btn-extract" class="btn">自动发现元素</button>
-    <button id="btn-auto-tree" class="btn">自动建功能点树</button>
-    <button id="btn-go-cases" class="btn accent">生成测试用例</button>
-  </div>
-
-  <main class="workspace layout-3">
-    <!-- 左：功能点树状图 -->
+  <main class="workspace layout-3 compact-top">
+    <!-- 左：树 -->
     <aside class="col tree-col">
       <div class="col-head">
         <b>功能点树</b>
@@ -46,66 +39,63 @@
           <button id="btn-add-point" class="mini">+功能点</button>
         </div>
       </div>
-      <div class="hint-line">模块 → 一级目录 → 二级目录 → 三级目录 → 功能点（缺级用 <b>/</b> 占位）</div>
+      <div class="hint-line">模块 → 一/二/三级目录 → 功能点（缺级 <b>/</b>）· 双击/右键编辑移动</div>
       <div id="tree" class="tree"></div>
-      <div class="col-head"><b>节点判定</b>
-        <span class="muted" id="sel-node-info">选中树节点</span>
-      </div>
-      <div class="status-box">
-        <textarea id="node-annotation" rows="2" placeholder="问题标注 / 备注"></textarea>
-      </div>
     </aside>
 
-    <!-- 中：浏览器手动操作 -->
-    <section class="col center-col">
-      <div class="col-head">
-        <b>浏览器手动操作界面（实时镜像）</b>
-        <div class="actions">
-          <input id="type-input" placeholder="点选输入框后在此键入，回车提交" style="min-width:220px" />
-          <button class="mini" id="btn-send-type">键入</button>
-          <button class="mini" id="btn-send-enter">Enter</button>
-          <button class="mini" id="btn-send-tab">Tab</button>
-          <button class="mini" id="btn-clear-input">清空</button>
-        </div>
+    <!-- 中：浏览器壳 + 镜像 + 元素 -->
+    <section class="col center-col browser-col">
+      <div class="browser-chrome">
+        <button id="btn-back" class="chrome-btn" title="后退">←</button>
+        <button id="btn-reload" class="chrome-btn" title="刷新">⟳</button>
+        <input id="addr-url" class="chrome-url" spellcheck="false"
+               placeholder="https://目标系统地址，镜像内直接点击登录（无需 Cookie）" />
+        <button id="btn-go" class="chrome-go">前往</button>
       </div>
       <div class="live-wrap">
-        <div class="live-stage" id="live-stage">
-          <div class="live-frame" id="live-frame">
-            <img id="live-img" alt="实时页面" />
+        <div class="live-stage" id="live-stage" tabindex="0">
+          <div class="live-empty" id="live-empty">
+            <div class="empty-box">
+              <div class="empty-icon">⌘</div>
+              <div>等待启动浏览器</div>
+              <div class="muted">启动后在地址栏输入网址，在镜像内直接点击、输入、登录</div>
+            </div>
+          </div>
+          <div class="live-frame hidden" id="live-frame">
+            <img id="live-img" alt="实时页面" draggable="false" />
           </div>
           <div id="live-cross"></div>
+          <div id="ctx-menu" class="ctx-menu hidden"></div>
         </div>
-        <div class="live-hint muted">点击画面 = 页面内点击（登录、展开菜单、点功能入口）</div>
+        <div class="live-hint muted">
+          点击镜像获得焦点后可直接打字 / 滚轮滚动 · 识别框右键取消 · 空白处右键可添加功能点
+        </div>
       </div>
       <div class="col-head">
         <b>交互元素</b>
-        <span class="muted" id="el-count">「标记为…」= 建模块/目录/功能点；勾选可批量挂到当前节点</span>
-      </div>
-      <div class="filters">
-        <input id="el-filter" placeholder="过滤：按钮/输入框/名称…" />
-        <select id="el-kind">
-          <option value="">全部类型</option>
-          <option value="button">按钮</option>
-          <option value="input">输入框</option>
-          <option value="select">下拉框</option>
-          <option value="link">链接</option>
-          <option value="check">勾选</option>
-        </select>
-        <select id="el-frame"><option value="">全部 frame</option></select>
-        <button class="mini" id="btn-sel-all">全选</button>
-        <button class="mini" id="btn-sel-none">全不选</button>
-        <button class="mini primary" id="btn-mark-selected">勾选挂到当前功能点</button>
+        <div>
+          <input id="el-filter" placeholder="过滤…" style="width:140px" />
+          <select id="el-kind" style="width:100px">
+            <option value="">全部</option>
+            <option value="button">按钮</option>
+            <option value="input">输入框</option>
+            <option value="select">下拉框</option>
+            <option value="link">链接</option>
+          </select>
+          <button class="mini" id="btn-sel-all">全选</button>
+          <button class="mini" id="btn-sel-none">全不选</button>
+          <button class="mini primary" id="btn-mark-selected">挂到当前节点</button>
+        </div>
       </div>
       <div class="table-wrap el-table-wrap">
         <table class="table" id="el-table">
           <thead>
             <tr>
-              <th width="46"><input type="checkbox" id="el-select-all" title="全选" /></th>
-              <th width="70">类型</th>
-              <th>名称/文本</th>
+              <th width="40"><input type="checkbox" id="el-select-all" /></th>
+              <th width="60">类型</th>
+              <th>名称</th>
               <th>selector</th>
-              <th width="70">iframe</th>
-              <th width="110">操作</th>
+              <th width="100">操作</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -113,10 +103,11 @@
       </div>
     </section>
 
-    <!-- 右：配置/操作 -->
+    <!-- 右：判定 / 截图库 / 已标 / 用例 -->
     <aside class="col right-col">
-      <div class="col-head"><b>判定通过与否</b></div>
+      <div class="col-head"><b>判定</b><span class="muted" id="sel-node-info">未选节点</span></div>
       <div class="status-box">
+        <textarea id="node-annotation" rows="2" placeholder="问题标注"></textarea>
         <div class="actions">
           <button class="btn pass" id="btn-pass">通过</button>
           <button class="btn fail" id="btn-fail">不通过</button>
@@ -125,45 +116,36 @@
         </div>
       </div>
 
-      <div class="col-head"><b>截图</b></div>
-      <div class="status-box">
-        <label class="switch"><input type="checkbox" id="auto-shot" checked /> 自动截图</label>
-        <button class="btn" id="btn-shot" style="margin-top:8px;width:100%">手动截图</button>
+      <div class="col-head"><b>截图库</b>
+        <div>
+          <label class="switch"><input type="checkbox" id="auto-shot" checked /> 自动</label>
+          <button class="mini" id="btn-shot">手动</button>
+        </div>
       </div>
+      <div class="shot-dir muted" id="shot-dir">存储目录：—</div>
+      <div id="shot-list" class="shot-list"></div>
 
-      <div class="col-head"><b>已标功能点</b>
-        <span class="muted" id="marked-count">0</span>
-      </div>
+      <div class="col-head"><b>已标功能点</b><span class="muted" id="marked-count">0</span></div>
       <div id="marked-list" class="marked-list"></div>
 
-      <div class="col-head"><b>树用例预览</b></div>
+      <div class="col-head"><b>树用例</b></div>
       <div class="actions" style="padding:0 10px">
-        <button class="mini" id="btn-preview">刷新预览</button>
+        <button class="mini" id="btn-preview">预览</button>
         <button class="mini primary" id="btn-build-cases">生成入库</button>
         <button class="mini" id="btn-export">导出Excel</button>
       </div>
-      <div id="case-preview" class="case-preview muted">命名：模块-一级-二级-三级-功能点-XX功能点测试/验证</div>
+      <div id="case-preview" class="case-preview muted">模块-一-二-三-功能点-XX功能点测试/验证</div>
     </aside>
   </main>
 
-  <!-- 模型配置 -->
-  <div id="modal-config" class="modal hidden">
-    <div class="modal-box">
-      <h3>AI / 多模态模型</h3>
-      <div class="grid2">
-        <label class="field"><span>Provider</span>
-          <select id="cfg-provider"><option value="openai">OpenAI兼容</option><option value="anthropic">Anthropic</option><option value="custom">自定义</option></select>
-        </label>
-        <label class="field"><span>Base URL</span><input id="cfg-base" /></label>
-        <label class="field"><span>API Key</span><input id="cfg-key" type="password" placeholder="留空不改" /></label>
-        <label class="field"><span>文本模型</span><input id="cfg-model" /></label>
-        <label class="field"><span>多模态视觉模型</span><input id="cfg-vision" /></label>
-        <label class="field"><span>Temperature</span><input id="cfg-temp" type="number" step="0.1" /></label>
-      </div>
+  <!-- 大图详情 -->
+  <div id="modal-shot" class="modal hidden">
+    <div class="modal-box wide">
+      <h3>截图详情</h3>
+      <div class="muted" id="shot-detail-path">路径：—</div>
+      <img id="shot-detail-img" alt="截图" style="width:100%;max-height:70vh;object-fit:contain;background:#111" />
       <div class="actions">
-        <button id="btn-save-config" class="btn primary">保存</button>
-        <button id="btn-save-config-disk" class="btn">写入config.yaml</button>
-        <button id="btn-close-config" class="btn ghost">关闭</button>
+        <button id="btn-close-shot" class="btn ghost">关闭</button>
       </div>
     </div>
   </div>
@@ -182,12 +164,10 @@
           <option value="point" selected>功能点</option>
         </select>
       </label>
-      <label class="field"><span>节点名称</span><input id="mka-name" placeholder="默认用元素名称" /></label>
-      <label class="field"><span>挂到（父节点）</span>
-        <select id="mka-parent"></select>
-      </label>
+      <label class="field"><span>节点名称</span><input id="mka-name" /></label>
+      <label class="field"><span>挂到（父节点）</span><select id="mka-parent"></select></label>
       <div class="actions">
-        <button id="btn-save-mark-as" class="btn primary">确定标记</button>
+        <button id="btn-save-mark-as" class="btn primary">确定</button>
         <button id="btn-close-mark-as" class="btn ghost">取消</button>
       </div>
     </div>
@@ -209,13 +189,33 @@
           <option value="case">测试/验证</option>
         </select>
       </label>
-      <label class="field"><span>移动到（父节点）</span>
-        <select id="mn-parent"></select>
-      </label>
+      <label class="field"><span>移动到</span><select id="mn-parent"></select></label>
       <div class="actions">
         <button id="btn-save-node" class="btn primary">保存</button>
-        <button id="btn-del-node" class="btn danger">删除节点</button>
+        <button id="btn-del-node" class="btn danger">删除</button>
         <button id="btn-close-node" class="btn ghost">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模型配置 -->
+  <div id="modal-config" class="modal hidden">
+    <div class="modal-box">
+      <h3>AI 模型</h3>
+      <div class="grid2">
+        <label class="field"><span>Provider</span>
+          <select id="cfg-provider"><option value="openai">OpenAI兼容</option><option value="anthropic">Anthropic</option><option value="custom">自定义</option></select>
+        </label>
+        <label class="field"><span>Base URL</span><input id="cfg-base" /></label>
+        <label class="field"><span>API Key</span><input id="cfg-key" type="password" placeholder="留空不改" /></label>
+        <label class="field"><span>文本模型</span><input id="cfg-model" /></label>
+        <label class="field"><span>视觉模型</span><input id="cfg-vision" /></label>
+        <label class="field"><span>Temperature</span><input id="cfg-temp" type="number" step="0.1" /></label>
+      </div>
+      <div class="actions">
+        <button id="btn-save-config" class="btn primary">保存</button>
+        <button id="btn-save-config-disk" class="btn">写入配置</button>
+        <button id="btn-close-config" class="btn ghost">关闭</button>
       </div>
     </div>
   </div>
