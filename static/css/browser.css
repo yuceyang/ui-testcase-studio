@@ -838,3 +838,13 @@
   font-size: 12.5px;
 }
 .drop-menu button:hover { background: #f3f4f6; }
+
+
+.subsec {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  background: #fafbfc;
+}
+.subsec b { display: block; margin-bottom: 8px; }

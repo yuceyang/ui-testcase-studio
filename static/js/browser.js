@@ -917,14 +917,16 @@ function selectNode(id) {
   const n = state.tree.find((x) => x.id === id);
   renderTree();
   if (!n) return;
-  $("#sel-node-info").textContent = `${pathNames(id)} · ${n.status || "pending"}`;
-  $("#node-annotation").value = n.annotation || "";
+  const names = pathNames(id);
+  const info = $("#sel-node-info");
+  if (info) info.textContent = `${names} · ${n.status || "pending"}`;
+  const ann = $("#node-annotation");
+  if (ann) ann.value = n.annotation || "";
   const ids = new Set(n.element_ids || []);
   document.querySelectorAll(".shot-rect").forEach((r) => {
     r.classList.toggle("strong", ids.has(r.dataset.elId));
     r.classList.toggle("hover", ids.has(r.dataset.elId));
   });
-  // 节点关联截图详情入口
   if (n.screenshot_id) {
     const s = state.shots.find((x) => x.id === n.screenshot_id);
     if (s) showShotDetail(s);
@@ -1283,9 +1285,9 @@ $("#auto-shot").addEventListener("change", async (e) => {
   toast(e.target.checked ? "已开启自动截图" : "已关闭自动截图");
 });
 
-// 默认关闭自动截图
-$("#auto-shot").checked = false;
-api("/api/browser/screenshot/auto", { method: "POST", body: { enabled: false } }).catch(() => {});
+// 默认开启自动截图
+$("#auto-shot").checked = true;
+api("/api/browser/screenshot/auto", { method: "POST", body: { enabled: true } }).catch(() => {});
 
 $("#btn-shot").addEventListener("click", async () => {
   try {
@@ -1337,6 +1339,8 @@ function openCaseDetail(i) {
   const c = (window._lastCases || [])[i];
   if (!c) return;
   $("#cd-id").value = c.id || "";
+  $("#cd-point").value = c.point_id || "";
+  if (c.point_id) state.selectedNodeId = c.point_id;
   $("#cd-no").value = c.case_no || "";
   $("#cd-status").value = c.case_status || "未执行";
   $("#cd-sys").value = c.sys_name || "";
@@ -1354,15 +1358,12 @@ function openCaseDetail(i) {
   $("#cd-params").value = c.params || c.data || "-";
   $("#cd-remark").value = c.remark || "";
   const sp = c.screenshot_path || "";
-  $("#cd-shot-path").textContent = sp ? "截图：" + sp : "截图：—";
-  const img = $("#cd-shot");
-  if (sp && (c.screenshot_file || sp)) {
-    const fname = (c.screenshot_file || sp.split(/[\\/]/).pop() || "");
-    img.src = `/api/browser/shot-file/${encodeURIComponent(fname)}`;
-    img.style.display = "block";
-    img.onerror = () => (img.style.display = "none");
-  } else {
-    img.style.display = "none";
+  $("#shot-dir").textContent = sp ? "当前功能点截图：" + sp : "截图目录见项目 shots（入库前为临时目录）";
+  loadShotList();
+  // 树节点标注同步
+  const n = state.tree.find((x) => x.id === c.point_id);
+  if (n) {
+    $("#node-annotation").value = n.annotation || "";
   }
   $("#modal-case").classList.remove("hidden");
 }
