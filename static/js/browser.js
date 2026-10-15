@@ -139,7 +139,7 @@ $("#btn-del-project").addEventListener("click", async () => {
 function rebindCasesToTree() {
   const treeIds = new Set(state.tree.map((n) => n.id));
   const points = state.tree.filter((n) => n.node_type === "point" || n.node_type === "case");
-  const orphans = [];
+  state.orphanCaseIds = new Set();
   for (const c of state.committedCases || []) {
     if (c.point_id && treeIds.has(c.point_id)) continue;
     let hit = points.find((p) => p.name && (c.title || "").includes(p.name));
@@ -147,11 +147,10 @@ function rebindCasesToTree() {
       hit = state.tree.find((n) => n.node_type === "module" && n.name === c.module_cat);
     }
     if (hit) c.point_id = hit.id;
-    else orphans.push(c);
-  }
-  if (orphans.length && state.tree.length) {
-    const root = state.tree.find((n) => n.node_type === "point") || state.tree[0];
-    for (const c of orphans) c.point_id = root.id;
+    else {
+      c.point_id = "__unbound__";
+      state.orphanCaseIds.add(c.id);
+    }
   }
 }
 
@@ -874,6 +873,7 @@ function renderTree() {
     title3: "三级",
     point: "功能点",
     case: "用例",
+    unbound: "未绑定",
   };
 
   function nodeHtml(n) {
@@ -920,8 +920,40 @@ function renderTree() {
   }
 
   const rootNodes = state.tree.filter((n) => !n.parent_id);
+  // 未绑定用例虚拟分组
+  const unbound = casesByPoint["__unbound__"] || [];
+  const unboundHtml = unbound.length
+    ? `
+      <div class="tree-node unbound-root" data-id="__unbound__">
+        <span class="twist" data-twist="__unbound__">${
+          state.collapsedIds.has("__unbound__") ? "▸" : "▾"
+        }</span>
+        <input type="checkbox" class="tree-check" data-id="__unbound__" ${
+          state.checkedIds.has("__unbound__") ? "checked" : ""
+        } />
+        <span class="badge-sm unbound">未绑定</span>
+        <span class="nm">未绑定用例</span>
+        <span class="case-cnt">${unbound.length}</span>
+      </div>
+      ${
+        state.collapsedIds.has("__unbound__")
+          ? ""
+          : `<div class="tree-children">${unbound
+              .map(
+                (c) => `
+        <div class="tree-node tree-case" data-id="${c.id}" data-point="__unbound__">
+          <input type="checkbox" class="tree-check" data-id="${c.id}" ${
+                  state.checkedIds.has(c.id) ? "checked" : ""
+                } />
+          <span class="badge-sm case">用例</span>
+          <span class="nm">${esc(c.case_no || "")} ${esc((c.title || "").slice(0, 24))}</span>
+        </div>`
+              )
+              .join("")}</div>`
+      }`
+    : "";
   $("#tree").innerHTML =
-    rootNodes.map(nodeHtml).join("") ||
+    (rootNodes.map(nodeHtml).join("") + unboundHtml) ||
     `<div class="muted" style="padding:12px">空树。「自动建树」或右键镜像添加。</div>`;
 
   const total = (state.committedCases || []).length;

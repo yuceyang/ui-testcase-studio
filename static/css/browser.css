@@ -870,3 +870,6 @@
 
 .tree { line-height: 1.35; padding: 4px 8px; }
 .tree-node { padding: 2px 6px; }
+
+.badge-sm.unbound { background: #fee2e2; color: #b91c1c; }
+.unbound-root { background: #fff7f7; }
