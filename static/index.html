@@ -62,11 +62,11 @@
 
         <div class="col-head"><b>截图库</b>
           <div>
-            <label class="switch"><input type="checkbox" id="auto-shot" checked /> 自动</label>
-            <button class="mini" id="btn-shot">手动</button>
+            <label class="switch"><input type="checkbox" id="auto-shot" /> 自动截图</label>
+            <button class="mini" id="btn-shot">手动截图</button>
           </div>
         </div>
-        <div class="shot-dir muted" id="shot-dir">存储目录：—</div>
+        <div class="shot-dir muted" id="shot-dir">存储目录：— · 默认不自动截图</div>
         <div id="shot-list" class="shot-list"></div>
 
         <div class="col-head"><b>已标功能点</b><span class="muted" id="marked-count">0</span></div>
@@ -75,7 +75,7 @@
         <div class="col-head"><b>设置 / 树用例</b>
           <span class="muted">仅树上功能点</span>
         </div>
-        <div class="actions" style="padding:0 10px">
+        <div class="actions" style="padding:4px 10px">
           <button class="mini" id="btn-preview">预览</button>
           <button class="mini primary" id="btn-build-cases">生成入库</button>
           <button class="mini" id="btn-export">导出Excel</button>

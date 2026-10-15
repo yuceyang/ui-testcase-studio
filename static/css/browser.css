@@ -165,8 +165,30 @@
 }
 .left-stack .side-panel {
   flex: var(--side-flex, 48) 1 0%;
-  min-height: 180px;
+  min-height: 220px;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.side-panel .col-head,
+.side-panel .status-box,
+.side-panel .shot-dir,
+.side-panel .shot-list,
+.side-panel .marked-list,
+.side-panel .actions {
+  flex: 0 0 auto;
+}
+.side-panel .shot-list {
+  max-height: 120px;
+}
+.side-panel .marked-list {
+  max-height: 140px;
+}
+.side-panel .case-preview {
+  flex: 1 1 auto;
+  min-height: 96px;
+  overflow: auto;
+  padding: 8px 10px 16px;
 }
 .right-stack .browser-col {
   flex: var(--browser-flex, 62) 1 0%;

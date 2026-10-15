@@ -1079,14 +1079,39 @@ async function loadShotList() {
       <div class="shot-item" data-id="${s.id}">
         <img src="/api/browser/shot-file/${encodeURIComponent(s.file || s.id + ".png")}" alt="" />
         <div class="p">${esc(s.tag || "")} · ${new Date((s.time || 0) * 1000).toLocaleString()}<br/>${esc(s.path || s.file || "")}</div>
+        <button class="mini danger" data-act="del-shot" data-id="${s.id}" title="删除截图">删</button>
       </div>`
         )
-        .join("") || `<div class="muted">暂无截图</div>`;
+        .join("") || `<div class="muted">暂无截图（默认关闭自动截图）</div>`;
 
     $("#shot-list").querySelectorAll(".shot-item").forEach((el) => {
-      el.addEventListener("click", () => {
+      el.addEventListener("click", (ev) => {
+        if (ev.target.closest("[data-act=del-shot]")) return;
         const s = shots.find((x) => x.id === el.dataset.id);
         if (s) showShotDetail(s);
+      });
+    });
+    $("#shot-list").querySelectorAll("[data-act=del-shot]").forEach((btn) => {
+      btn.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        const id = btn.dataset.id;
+        if (!confirm("删除该截图？")) return;
+        try {
+          await api(`/api/browser/shots/${id}`, { method: "DELETE" });
+          // 同步项目内记录
+          if (state.projectId) {
+            const p = await api(`/api/projects/${state.projectId}`);
+            const shots2 = (p.project.shots || []).filter((x) => x.id !== id);
+            await api(`/api/projects/${state.projectId}`, {
+              method: "PUT",
+              body: { shots: shots2 },
+            });
+          }
+          await loadShotList();
+          toast("截图已删除", "ok");
+        } catch (e) {
+          toast(e.message, "err");
+        }
       });
     });
   } catch {
@@ -1103,7 +1128,12 @@ $("#btn-close-shot").addEventListener("click", () => $("#modal-shot").classList.
 
 $("#auto-shot").addEventListener("change", async (e) => {
   await api("/api/browser/screenshot/auto", { method: "POST", body: { enabled: e.target.checked } });
+  toast(e.target.checked ? "已开启自动截图" : "已关闭自动截图");
 });
+
+// 默认关闭自动截图
+$("#auto-shot").checked = false;
+api("/api/browser/screenshot/auto", { method: "POST", body: { enabled: false } }).catch(() => {});
 
 $("#btn-shot").addEventListener("click", async () => {
   try {

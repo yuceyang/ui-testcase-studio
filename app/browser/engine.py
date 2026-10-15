@@ -40,7 +40,7 @@ class BrowserEngine:
         self._playwright = None
         self.session_id: str = ""
         self.headless: bool = os.environ.get("QTS_HEADED", "").lower() not in ("1", "true")
-        self.auto_screenshot: bool = True
+        self.auto_screenshot: bool = False
         self.last_shot_id: str = ""
         self.shots: list[dict] = []
         self.marked_elements: list[dict] = []
