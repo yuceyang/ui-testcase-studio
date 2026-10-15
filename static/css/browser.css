@@ -864,3 +864,6 @@
 
 .autosave-tip{white-space:nowrap;color:var(--muted);font-size:12px;margin-left:6px}
 .project-bar{flex-wrap:nowrap}
+
+.twist { width: 12px; text-align: center; cursor: pointer; color: var(--muted); user-select: none; flex-shrink: 0; }
+.twist.empty { cursor: default; opacity: .35; }

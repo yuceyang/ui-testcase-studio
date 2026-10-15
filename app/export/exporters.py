@@ -75,7 +75,7 @@ def _row(c: TestCase) -> list[str]:
         _cell(c.params),
         _cell(c.case_status or "未执行"),
         _cell(c.screenshot_path),
-        "[截图见嵌入/路径]",
+        "",  # 截图列：插入图片，文本留空
     ]
 
 
@@ -128,29 +128,37 @@ def _to_xlsx(cases: list[TestCase], path: Path) -> None:
     for c in cases:
         ws.append(_row(c))
 
-    # 截图嵌入（最后一列后追加图片）
+    # 在「截图」列真正插入图片
+    shot_col = V3_HEADERS.index("截图") + 1
     try:
         from openpyxl.drawing.image import Image as XLImage
-        from PIL import Image as PILImage  # noqa: F401
-        import io
 
         for i, c in enumerate(cases, start=2):
-            path = c.screenshot_path or ""
+            path = c.screenshot_path or c.screenshot_file or ""
+            cell = ws.cell(row=i, column=shot_col)
             if not path or not Path(path).exists():
+                cell.value = c.screenshot_path or "-"
                 continue
-            # 限制大图，避免 xlsx 过大
-            img = XLImage(path)
-            scale = 320 / (img.width or 1)
-            if scale < 1:
-                img.width = int(img.width * scale)
-                img.height = int(img.height * scale)
-            # 放在备注右侧“截图”列后空白区
-            col = len(V3_HEADERS) + 1
-            anchor = f"{get_column_letter(col)}{i}"
-            ws.add_image(img, anchor)
-            ws.column_dimensions[get_column_letter(col)].width = 36
+            try:
+                img = XLImage(str(path))
+            except Exception:
+                cell.value = c.screenshot_path
+                continue
+            try:
+                w0 = float(img.width or 240)
+                h0 = float(img.height or 160)
+                scale = min(1.0, 240.0 / w0)
+                img.width = int(w0 * scale)
+                img.height = int(h0 * scale)
+                ws.row_dimensions[i].height = max(78, img.height * 0.75)
+                ws.column_dimensions[get_column_letter(shot_col)].width = 36
+                cell.value = ""
+                ws.add_image(img, f"{get_column_letter(shot_col)}{i}")
+            except Exception:
+                cell.value = c.screenshot_path or "-"
     except Exception:
-        pass
+        for i, c in enumerate(cases, start=2):
+            ws.cell(row=i, column=shot_col).value = c.screenshot_path or "-"
 
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=len(V3_HEADERS)):
         for cell in row:

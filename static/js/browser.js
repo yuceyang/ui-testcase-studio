@@ -17,6 +17,7 @@ const state = {
   projectCases: [],
   committedCases: [],
   checkedIds: new Set(),
+  collapsedIds: new Set(),
 };
 
 let liveTimer = null;
@@ -861,21 +862,29 @@ function renderTree() {
     const st = n.status || "pending";
     const stCls = st === "pass" ? "st-pass" : st === "fail" ? "st-fail" : "";
     const cnt = caseCountForNode(n.id);
-    const caseHtml = cs
-      .map(
-        (c) => `
+    const hasKids = kids.length > 0 || cs.length > 0;
+    const collapsed = state.collapsedIds.has(n.id);
+    const caseHtml = collapsed
+      ? ""
+      : cs
+          .map(
+            (c) => `
       <div class="tree-node tree-case" data-id="${c.id}" data-point="${c.point_id || ""}">
         <input type="checkbox" class="tree-check" data-id="${c.id}" ${
-          state.checkedIds.has(c.id) ? "checked" : ""
-        } />
+              state.checkedIds.has(c.id) ? "checked" : ""
+            } />
         <span class="badge-sm case">用例</span>
         <span class="nm">${esc(c.case_no || "")} ${esc((c.title || "").slice(0, 24))}</span>
       </div>`
-      )
-      .join("");
+          )
+          .join("");
+    const childHtml = collapsed ? "" : kids.map(nodeHtml).join("");
     return `
       <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}">
-        <input type="checkbox" class="tree-check" data-id="${n.id}" title="多选以便批量删除" ${
+        <span class="twist ${hasKids ? "" : "empty"}" data-twist="${n.id}" title="折叠/展开">${
+          hasKids ? (collapsed ? "▸" : "▾") : "·"
+        }</span>
+        <input type="checkbox" class="tree-check" data-id="${n.id}" ${
           state.checkedIds.has(n.id) ? "checked" : ""
         } />
         <span class="badge-sm ${n.node_type}">${typeLabel[n.node_type] || n.node_type}</span>
@@ -884,8 +893,8 @@ function renderTree() {
         <span class="${stCls}">${st === "pass" ? "✓" : st === "fail" ? "✗" : ""}</span>
       </div>
       ${
-        caseHtml || kids.length
-          ? `<div class="tree-children">${caseHtml}${kids.map(nodeHtml).join("")}</div>`
+        caseHtml || childHtml
+          ? `<div class="tree-children">${caseHtml}${childHtml}</div>`
           : ""
       }`;
   }
@@ -923,6 +932,15 @@ function renderTree() {
         openNodeEditor(el.dataset.id);
       });
     }
+  });
+  $("#tree").querySelectorAll("[data-twist]").forEach((tw) => {
+    tw.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const id = tw.dataset.twist;
+      if (state.collapsedIds.has(id)) state.collapsedIds.delete(id);
+      else state.collapsedIds.add(id);
+      renderTree();
+    });
   });
   $("#tree").querySelectorAll(".tree-check").forEach((cb) => {
     const id = cb.dataset.id;
