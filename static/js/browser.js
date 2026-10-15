@@ -15,6 +15,7 @@ const state = {
   projectId: localStorage.getItem("qts_project_id") || "",
   liveReady: false,
   projectCases: [],
+  committedCases: [],
 };
 
 let liveTimer = null;
@@ -129,10 +130,11 @@ async function loadProject() {
     state.marked = r.project.marked_elements || [];
     state.shots = r.project.shots || [];
     state.projectCases = r.project.cases || [];
-    window._lastCases = state.projectCases;
+    state.committedCases = r.project.cases || [];
+    window._lastCases = [];
     renderTree();
     renderMarked();
-    renderPreview({ cases: state.projectCases });
+    renderPreview({ cases: [], mode: "preview" });
     await loadShotList();
     toast(`已加载 ${r.project.name}（恢复登录:${r.restored_login ? "是" : "否"}）`, "ok");
   } catch (e) {
@@ -809,9 +811,9 @@ function pathNames(id) {
 }
 
 function caseCountForNode(id) {
-  const list = window._lastCases || state.projectCases || [];
+  // 统计始终用「已入库全量」，不随列表过滤变化
+  const list = state.committedCases || [];
   if (!list.length) return 0;
-  // 该节点及其子树命中的用例
   const ids = descendantsOf(id);
   return list.filter((c) => ids.has(c.point_id)).length;
 }
@@ -822,20 +824,36 @@ function renderTree() {
     const p = n.parent_id || "";
     (byParent[p] = byParent[p] || []).push(n);
   }
+  // 已入库用例作为叶子挂在 point 下
+  const casesByPoint = {};
+  for (const c of state.committedCases || []) {
+    (casesByPoint[c.point_id] = casesByPoint[c.point_id] || []).push(c);
+  }
   const typeLabel = {
     module: "模块",
     title1: "一级",
     title2: "二级",
     title3: "三级",
     point: "功能点",
-    case: "验证",
+    case: "用例",
   };
 
   function nodeHtml(n) {
     const kids = byParent[n.id] || [];
+    const cs = casesByPoint[n.id] || [];
     const st = n.status || "pending";
     const stCls = st === "pass" ? "st-pass" : st === "fail" ? "st-fail" : "";
     const cnt = caseCountForNode(n.id);
+    const caseHtml = cs
+      .map(
+        (c) => `
+      <div class="tree-node tree-case" data-id="${c.id}" data-point="${c.point_id || ""}">
+        <input type="checkbox" class="tree-check" data-id="${c.id}" />
+        <span class="badge-sm case">用例</span>
+        <span class="nm">${esc(c.case_no || "")} ${esc((c.title || "").slice(0, 24))}</span>
+      </div>`
+      )
+      .join("");
     return `
       <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}">
         <input type="checkbox" class="tree-check" data-id="${n.id}" title="多选以便批量删除" />
@@ -844,6 +862,7 @@ function renderTree() {
         ${cnt ? `<span class="case-cnt" title="测试用例数">${cnt}</span>` : ""}
         <span class="${stCls}">${st === "pass" ? "✓" : st === "fail" ? "✗" : ""}</span>
       </div>
+      ${caseHtml}
       ${kids.length ? `<div class="tree-children">${kids.map(nodeHtml).join("")}</div>` : ""}`;
   }
 
@@ -852,21 +871,34 @@ function renderTree() {
     rootNodes.map(nodeHtml).join("") ||
     `<div class="muted" style="padding:12px">空树。「自动建树」或右键镜像添加。</div>`;
 
-  const total = (window._lastCases || state.projectCases || []).length;
+  const total = (state.committedCases || []).length;
   const el = $("#tree-case-total");
   if (el) el.textContent = total + " 用例";
 
   $("#tree").querySelectorAll(".tree-node").forEach((el) => {
     el.addEventListener("click", (ev) => {
       if (ev.target.classList && ev.target.classList.contains("tree-check")) return;
-      selectNode(el.dataset.id);
-      showCasesForNode(el.dataset.id);
+      const id = el.dataset.id;
+      if (el.classList.contains("tree-case")) {
+        // 点用例 → 详情
+        const list = state.committedCases || [];
+        const i = list.findIndex((x) => x.id === id);
+        if (i >= 0) {
+          renderPreview({ cases: list, mode: "committed" });
+          openCaseDetail(i);
+        }
+        return;
+      }
+      selectNode(id);
+      showCasesForNode(id);
     });
-    el.addEventListener("dblclick", () => openNodeEditor(el.dataset.id));
-    el.addEventListener("contextmenu", (ev) => {
-      ev.preventDefault();
-      openNodeEditor(el.dataset.id);
-    });
+    if (!el.classList.contains("tree-case")) {
+      el.addEventListener("dblclick", () => openNodeEditor(el.dataset.id));
+      el.addEventListener("contextmenu", (ev) => {
+        ev.preventDefault();
+        openNodeEditor(el.dataset.id);
+      });
+    }
   });
   $("#tree").querySelectorAll(".tree-check").forEach((cb) => {
     cb.addEventListener("click", (ev) => ev.stopPropagation());
@@ -879,33 +911,6 @@ function renderTree() {
       });
     });
   });
-}
-
-function showCasesForNode(nodeId) {
-  const ids = descendantsOf(nodeId);
-  const all = window._lastCases || state.projectCases || [];
-  const list = all.filter((c) => ids.has(c.point_id));
-  if (!list.length) {
-    // 自动对单节点预览生成
-    api("/api/browser/tree/preview-cases", {
-      method: "POST",
-      body: {
-        include_negative: true,
-        include_auth_cases: true,
-        point_ids: [nodeId],
-      },
-    })
-      .then((r) => {
-        window._lastCases = r.cases || [];
-        renderPreview({ cases: window._lastCases });
-      })
-      .catch(() => {
-        $("#case-preview").innerHTML =
-          '<div class="muted">该节点暂无用例。可点「预览/生成入库」</div>';
-      });
-    return;
-  }
-  renderPreview({ cases: list });
 }
 
 $("#btn-del-tree-selected").addEventListener("click", async () => {
@@ -968,6 +973,31 @@ async function loadTree() {
   } catch {
     /* ignore */
   }
+}
+
+function showCasesForNode(nodeId) {
+  const ids = descendantsOf(nodeId);
+  const all = state.committedCases || [];
+  const list = all.filter((c) => ids.has(c.point_id) || ids.has(c.id));
+  if (list.length) {
+    renderPreview({ cases: list, mode: "committed" });
+    return;
+  }
+  api("/api/browser/tree/preview-cases", {
+    method: "POST",
+    body: {
+      include_negative: true,
+      include_auth_cases: true,
+      point_ids: [nodeId],
+    },
+  })
+    .then((r) => {
+      renderPreview({ cases: r.cases || [], mode: "preview" });
+    })
+    .catch(() => {
+      $("#case-preview").innerHTML =
+        '<div class="muted">该节点暂无已入库用例。可「预览/生成入库」</div>';
+    });
 }
 
 function selectNode(id) {
@@ -1375,17 +1405,20 @@ $("#btn-shot").addEventListener("click", async () => {
 /* ================= 用例 ================= */
 function renderPreview(r) {
   const list = r.cases || [];
-  const titles = r.titles || [];
+  const mode = r.mode || "preview";
   window._lastCases = list;
-  if (!titles.length && !list.length) {
-    $("#case-preview").innerHTML = "暂无用例";
+  $("#case-preview").dataset.mode = mode;
+  if (!list.length) {
+    $("#case-preview").innerHTML =
+      mode === "committed"
+        ? "暂无已入库用例"
+        : "暂无预览。点「预览」或「生成入库」";
     return;
   }
+  const tag = mode === "committed" ? "已入库" : "未入库";
   $("#case-preview").innerHTML =
-    (list.length
-      ? list
-      : titles.map((t) => ({ title: t.title, module: t.module, priority: t.priority, case_no: "" }))
-    )
+    `<div class="muted" style="padding:4px 6px">当前显示：${tag} · ${list.length} 条</div>` +
+    list
       .map(
         (c, i) => `
       <div class="t case-item" data-i="${i}" style="cursor:pointer">
@@ -1421,10 +1454,33 @@ function openCaseDetail(i) {
   $("#cd-url").value = c.url || "";
   $("#cd-params").value = c.params || c.data || "-";
   $("#cd-remark").value = c.remark || "";
-  const sp = c.screenshot_path || "";
-  $("#shot-dir").textContent = sp ? "当前功能点截图：" + sp : "截图目录见项目 shots（入库前为临时目录）";
-  loadShotList();
-  // 树节点标注同步
+  // 截图：临时/入库都显示
+  const fname =
+    c.screenshot_file ||
+    (c.screenshot_path || "").split(/[\\/]/).pop() ||
+    "";
+  const shotBox = $("#shot-list");
+  if (fname) {
+    const url = `/api/browser/shot-file/${encodeURIComponent(fname)}`;
+    shotBox.innerHTML =
+      `<div class="shot-item"><img src="${url}" alt="用例截图" />
+       <div class="p">${c.committed ? "" : "[临时] "}${esc(c.screenshot_path || fname)}</div></div>` +
+      (shotBox.innerHTML || "");
+    $("#shot-dir").textContent = "用例截图：" + (c.screenshot_path || fname);
+  } else {
+    $("#shot-dir").textContent =
+      "当前无关联截图。自动截图开启后操作页面会生成，入库后写入截图库。";
+  }
+  loadShotList().then(() => {
+    if (fname) {
+      const url = `/api/browser/shot-file/${encodeURIComponent(fname)}`;
+      $("#shot-list").insertAdjacentHTML(
+        "afterbegin",
+        `<div class="shot-item"><img src="${url}" alt="用例截图" />
+         <div class="p">[用例关联] ${esc(c.screenshot_path || fname)}</div></div>`
+      );
+    }
+  });
   const n = state.tree.find((x) => x.id === c.point_id);
   if (n) {
     $("#node-annotation").value = n.annotation || "";
@@ -1483,17 +1539,24 @@ $("#btn-build-cases").addEventListener("click", async () => {
       body: { extra: { include_negative: true, include_auth_cases: true }, sys_name: "" },
     });
     state.sessionId = r.session_id;
-    window._lastCases = r.cases || [];
-    state.projectCases = r.cases || [];
-    renderPreview({ cases: r.cases });
-    renderTree();
+    // 入库：进 committedCases，挂在树上；生成台清空
+    state.committedCases = r.cases || [];
+    state.projectCases = state.committedCases;
+    window._lastCases = [];
     if (state.projectId) {
       api(`/api/projects/${state.projectId}`, {
         method: "PUT",
-        body: { cases: state.projectCases },
+        body: { cases: state.committedCases },
+      }).catch(() => {});
+      api(`/api/projects/${state.projectId}/save-from-engine`, {
+        method: "POST",
+        body: {},
       }).catch(() => {});
     }
-    toast(`已生成 ${r.count} 条`, "ok");
+    renderTree();
+    $("#case-preview").innerHTML =
+      `<div class="muted">已入库 ${state.committedCases.length} 条，显示在功能点树下。点击树节点/用例查看。</div>`;
+    toast(`已入库 ${r.count} 条`, "ok");
   } catch (e) {
     toast(e.message, "err");
   }
