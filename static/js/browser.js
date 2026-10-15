@@ -200,14 +200,28 @@ $("#btn-start").addEventListener("click", async () => {
     await api("/api/browser/start", { method: "POST", body: { headless: true } });
     // 重启清空残留识别框
     state.elements = [];
-    state.marked = state.marked || [];
     renderElements();
     drawGhost();
     startLive();
     setLiveVisible(true);
     await loadLiveMeta(false);
     refreshStatus();
-    toast("浏览器已启动，可直接在镜像内操作", "ok");
+    toast("浏览器已启动，可在地址栏输入网址或直接关闭", "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
+
+$("#btn-stop").addEventListener("click", async () => {
+  try {
+    await api("/api/browser/close", { method: "POST", body: {} });
+    stopLive();
+    setLiveVisible(false);
+    state.elements = [];
+    renderElements();
+    drawGhost();
+    refreshStatus();
+    toast("浏览器已关闭", "ok");
   } catch (e) {
     toast(e.message, "err");
   }
@@ -1331,31 +1345,36 @@ function initSplitters() {
 function initPopout() {
   const pop = $("#popout-browser");
   const body = $("#popout-body");
-  const chromeHost = $("#browser-col");
+  const chromeEl = $("#browser-chrome");
+  const liveWrap = document.querySelector("#browser-col .live-wrap");
   const placeholder = $("#browser-placeholder");
   const bar = $("#popout-bar");
   const resize = $("#popout-resize");
-  let dockedParent = null;
 
   const popOut = () => {
     if (!pop.classList.contains("hidden")) return;
-    dockedParent = chromeHost.parentElement;
-    body.appendChild(chromeHost);
+    // 只搬浏览器壳+镜像，占位留在主界面
+    body.appendChild(chromeEl);
+    body.appendChild(liveWrap);
     pop.classList.remove("hidden");
     placeholder.classList.remove("hidden");
-    chromeHost.style.flex = "1";
-    chromeHost.style.minHeight = "0";
+    // 默认比例接近 16:10
+    const w = Math.min(1100, window.innerWidth * 0.72);
+    const h = Math.min(720, window.innerHeight * 0.78);
+    pop.style.width = w + "px";
+    pop.style.height = h + "px";
+    pop.style.left = Math.max(12, window.innerWidth - w - 28) + "px";
+    pop.style.top = "96px";
+    pop.style.right = "auto";
     toast("浏览器区已弹出，可拖动标题栏 / 右下角缩放");
     drawGhost();
   };
 
   const dockBack = () => {
     if (pop.classList.contains("hidden")) return;
-    // 插回右列顶部（elements 之前）
-    const right = $("#right-stack");
-    right.insertBefore(chromeHost, right.querySelector(".splitter") || right.querySelector(".elements-panel"));
-    chromeHost.style.flex = "";
-    chromeHost.style.minHeight = "";
+    const host = $("#browser-col");
+    host.insertBefore(chromeEl, placeholder);
+    host.insertBefore(liveWrap, placeholder);
     pop.classList.add("hidden");
     placeholder.classList.add("hidden");
     drawGhost();
