@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime / secrets
+config.yaml
+data/output/
+data/sessions/
+*.png
+*.xlsx
+*.log
+
+# Keep example and templates
+!config.example.yaml
+!docs/**/*.png
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local worktrees
+.worktrees/

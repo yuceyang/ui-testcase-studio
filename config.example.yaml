@@ -1,0 +1,65 @@
+# 软件功能测试系统 — 配置样例
+# 复制为 config.yaml 后按需修改
+
+server:
+  host: "127.0.0.1"
+  port: 8787
+
+# AI 能力配置（默认多模态）
+ai:
+  provider: "openai"              # openai | anthropic | custom
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-your-api-key"
+  model: "gpt-4o"                 # 默认多模态模型（支持图片输入）
+  vision_model: "gpt-4o"          # 复杂页面/截图识别用
+  temperature: 0.3
+  max_tokens: 8000
+  timeout: 120
+  # Anthropic 专用示例：
+  # provider: "anthropic"
+  # base_url: "https://api.anthropic.com"
+  # model: "claude-sonnet-4-20250514"
+  # vision_model: "claude-sonnet-4-20250514"
+
+discovery:
+  # 爬取与发现参数
+  max_pages: 30                  # 最多抓取页面数
+  max_depth: 3                   # 链接递归深度
+  timeout: 15                    # 单请求超时（秒）
+  same_origin_only: true         # 仅抓取同源链接
+  respect_robots: false          # 测试环境一般可关闭
+  # 只读约束：仅发现/验证查询类接口
+  allow_methods: ["GET", "HEAD", "OPTIONS"]
+  deny_path_keywords:
+    - "delete"
+    - "remove"
+    - "destroy"
+    - "create"
+    - "update"
+    - "edit"
+    - "insert"
+    - "modify"
+    - "drop"
+    - "upload"
+    - "export"                   # 可按业务放开
+  include_api_hints:
+    - "/api/"
+    - "/v1/"
+    - "/v2/"
+    - "/rest/"
+    - "/query"
+    - "/list"
+    - "/search"
+    - "/detail"
+    - "/get"
+    - "/find"
+    - "/info"
+
+# 用例生成约束（写入提示词）
+test_policy:
+  scope: "query_only"            # 仅查询/只读，禁止增删改
+  forbid_mutations: true
+  language: "zh-CN"
+  max_cases_per_point: 8
+  include_negative: true         # 是否生成异常/边界用例
+  include_auth_cases: true       # 是否生成鉴权失效类用例
