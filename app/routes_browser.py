@@ -425,6 +425,28 @@ def cases_from_tree(payload: dict):
     cases = build_cases_from_tree(
         tree, eng.list_marked(), extra, sys_name=sys_name, shots=eng.list_shots()
     )
+    # 入库：截图转入项目库
+    try:
+        from .projects import store as project_store
+
+        # 若当前有项目则提交到项目
+        lst = project_store.list_projects()
+        if lst:
+            eng.commit_shots(project_store.shots_dir(lst[0]["id"]))
+    except Exception:
+        pass
+    # 按勾选的功能点/目录过滤（含子树）
+    pids = set(payload.get("point_ids") or [])
+    if pids:
+        from .browser.tree import path_of
+
+        keep = []
+        for c in cases:
+            # point_id 或祖先命中
+            chain = path_of(c.point_id, tree)
+            if any(n.get("id") in pids for n in chain) or c.point_id in pids:
+                keep.append(c)
+        cases = keep
 
     if not store.get(sid):
         store.create(sid, base_url=eng.current().get("url", ""))
@@ -493,6 +515,11 @@ def delete_project(pid: str):
 @projects_router.post("/{pid}/save-from-engine")
 def save_from_engine(pid: str):
     eng = get_engine()
+    # 截图入库
+    try:
+        eng.commit_shots(project_store.shots_dir(pid))
+    except Exception:
+        pass
     saved = project_store.update_from_engine(pid, eng)
     # 顺带保存登录态（必须在 Playwright 线程）
     try:

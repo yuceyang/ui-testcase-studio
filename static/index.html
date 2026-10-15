@@ -32,9 +32,24 @@
         <div class="col-head collapsible" data-collapse="tree-body">
           <b>功能点树</b>
           <div>
-            <button id="btn-add-module" class="mini">+模块</button>
-            <button id="btn-add-title" class="mini">+目录</button>
-            <button id="btn-add-point" class="mini">+功能点</button>
+            <div class="drop">
+              <button class="mini" id="btn-add-menu">＋新增</button>
+              <div class="drop-menu hidden" id="add-menu">
+                <button data-add="module">模块</button>
+                <button data-add="title">目录（可选层级）</button>
+                <button data-add="point">功能点</button>
+              </div>
+            </div>
+            <div class="drop">
+              <button class="mini" id="btn-export-menu">批量导出</button>
+              <div class="drop-menu hidden" id="export-menu">
+                <button data-fmt="xlsx">Excel</button>
+                <button data-fmt="csv">CSV</button>
+                <button data-fmt="html">HTML</button>
+                <button data-fmt="json">JSON</button>
+                <button data-fmt="md">Markdown</button>
+              </div>
+            </div>
             <button id="btn-move-tree-selected" class="mini">批量移动</button>
             <button id="btn-del-tree-selected" class="mini danger">批量删除</button>
             <button class="mini collapse-toggle" data-collapse="tree-body">折叠</button>
@@ -158,7 +173,6 @@
             <button class="mini" id="btn-sel-all">全选</button>
             <button class="mini" id="btn-sel-none">全不选</button>
             <button class="mini" id="btn-bulk-mark-as">批量标记为…</button>
-            <button class="mini primary" id="btn-mark-selected">挂到当前节点</button>
             <button class="mini collapse-toggle" data-collapse="el-body">折叠</button>
           </div>
         </div>
@@ -182,17 +196,18 @@
       <div class="splitter h" data-split="cases-v" title="拖动用例区"></div>
       <section class="col cases-panel" id="cases-panel">
         <div class="col-head collapsible" data-collapse="cases-body">
-          <b>测试用例详情</b>
-          <span class="muted">《功能测试提示词 v3.0》 · 点击条目编辑</span>
+          <b>用例生成台（未入库）</b>
+          <span class="muted">AI 生成打印台 · 入库后可在树节点查看</span>
           <div>
             <button class="mini" id="btn-preview">预览</button>
             <button class="mini primary" id="btn-build-cases">生成入库</button>
             <button class="mini" id="btn-export">导出Excel</button>
+            <button class="mini danger" id="btn-clear-cases">清空</button>
             <button class="mini collapse-toggle" data-collapse="cases-body">折叠</button>
           </div>
         </div>
         <div id="cases-body" class="collapse-body grow">
-          <div id="case-preview" class="case-preview muted">GN-0001 · 系统/模块/一级/二级/用例标题</div>
+          <div id="case-preview" class="case-preview muted">GN-0001 · 系统/模块/一级/二级/用例标题 · 点击条目编辑；未入库前不保存</div>
         </div>
       </section>
     </div>

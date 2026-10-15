@@ -692,15 +692,6 @@ $("#btn-sel-none").addEventListener("click", () => {
   $("#el-select-all").checked = false;
   $("#el-select-all").dispatchEvent(new Event("change"));
 });
-$("#btn-mark-selected").addEventListener("click", async () => {
-  const ids = $$("#el-table .el-check:checked").map((x) => x.dataset.id);
-  if (!ids.length) return toast("请勾选元素", "err");
-  if (!state.selectedNodeId) return toast("请选中树节点", "err");
-  for (const id of ids) await markElement(id, true);
-  await loadTree();
-  selectNode(state.selectedNodeId);
-  toast(`已挂载 ${ids.length} 个`, "ok");
-});
 
 $("#btn-extract").addEventListener("click", async () => {
   try {
@@ -1099,29 +1090,78 @@ $("#btn-del-node").addEventListener("click", async () => {
   }
 });
 
-$("#btn-add-module").addEventListener("click", async () => {
-  const name = prompt("模块名称", "模块") || "模块";
-  await api("/api/browser/tree/node", { method: "POST", body: { name, node_type: "module" } });
-  await loadTree();
-});
-$("#btn-add-title").addEventListener("click", async () => {
-  const lvl = prompt("层级 1/2/3", "1");
-  const map = { "1": "title1", "2": "title2", "3": "title3" };
-  const name = prompt("目录名（可填 /）", "/") || "/";
-  await api("/api/browser/tree/node", {
-    method: "POST",
-    body: { name, node_type: map[lvl] || "title1", parent_id: state.selectedNodeId },
+/* 新增 / 批量导出 下拉 */
+function bindDrop(btnId, menuId) {
+  const btn = document.getElementById(btnId);
+  const menu = document.getElementById(menuId);
+  if (!btn || !menu) return;
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    $$(".drop-menu").forEach((m) => {
+      if (m !== menu) m.classList.add("hidden");
+    });
+    menu.classList.toggle("hidden");
   });
-  await loadTree();
-});
-$("#btn-add-point").addEventListener("click", async () => {
-  const name = prompt("功能点名称", "功能点") || "功能点";
-  await api("/api/browser/tree/node", {
-    method: "POST",
-    body: { name, node_type: "point", parent_id: state.selectedNodeId },
+}
+document.addEventListener("click", () => $$(".drop-menu").forEach((m) => m.classList.add("hidden")));
+bindDrop("btn-add-menu", "add-menu");
+bindDrop("btn-export-menu", "export-menu");
+
+$("#add-menu") &&
+  $("#add-menu").addEventListener("click", async (e) => {
+    const kind = e.target.dataset && e.target.dataset.add;
+    if (!kind) return;
+    $("#add-menu").classList.add("hidden");
+    if (kind === "module") {
+      const name = prompt("模块名称", "模块") || "模块";
+      await api("/api/browser/tree/node", { method: "POST", body: { name, node_type: "module" } });
+    } else if (kind === "title") {
+      const lvl = prompt("目录层级 1/2/3", "1");
+      const map = { "1": "title1", "2": "title2", "3": "title3" };
+      const name = prompt("目录名（可填 /）", "/") || "/";
+      await api("/api/browser/tree/node", {
+        method: "POST",
+        body: { name, node_type: map[lvl] || "title1", parent_id: state.selectedNodeId },
+      });
+    } else if (kind === "point") {
+      const name = prompt("功能点名称", "功能点") || "功能点";
+      await api("/api/browser/tree/node", {
+        method: "POST",
+        body: { name, node_type: "point", parent_id: state.selectedNodeId },
+      });
+    }
+    await loadTree();
   });
-  await loadTree();
-});
+
+$("#export-menu") &&
+  $("#export-menu").addEventListener("click", async (e) => {
+    const fmt = e.target.dataset && e.target.dataset.fmt;
+    if (!fmt) return;
+    $("#export-menu").classList.add("hidden");
+    const ids = $$("#tree .tree-check:checked").map((x) => x.dataset.id);
+    if (!ids.length) return toast("请勾选要导出的功能点树节点", "err");
+    try {
+      const r = await api("/api/browser/cases/from-tree", {
+        method: "POST",
+        body: {
+          extra: { include_negative: true, include_auth_cases: true },
+          point_ids: ids,
+          sys_name: "",
+        },
+      });
+      state.sessionId = r.session_id;
+      renderPreview({ cases: r.cases });
+      const ex = await api("/api/export", {
+        method: "POST",
+        body: { session_id: r.session_id, format: fmt, point_ids: ids },
+      });
+      const name = ex.path.split(/[\\/]/).pop();
+      window.open(`/api/export/download/${encodeURIComponent(name)}`, "_blank");
+      toast(`已导出 ${fmt.toUpperCase()}（${ex.count} 条）`, "ok");
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
 
 $("#btn-auto-tree").addEventListener("click", async () => {
   try {
@@ -1400,6 +1440,14 @@ $("#btn-export").addEventListener("click", async () => {
   }
 });
 $("#btn-go-cases").addEventListener("click", () => $("#btn-build-cases").click());
+
+$("#btn-clear-cases") &&
+  $("#btn-clear-cases").addEventListener("click", () => {
+    window._lastCases = [];
+    $("#case-preview").innerHTML =
+      '<div class="muted">已清空生成台（不影响已入库用例）</div>';
+    toast("生成台已清空");
+  });
 
 /* 折叠 */
 function initCollapsible() {

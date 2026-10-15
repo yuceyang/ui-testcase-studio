@@ -20,7 +20,9 @@ from .elements import EXTRACT_JS, extract_nav_tree, parse_extract
 
 
 SHOT_DIR = OUTPUT_DIR / "shots"
+TEMP_SHOT_DIR = OUTPUT_DIR / "shots_tmp"
 SHOT_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_SHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 PREFERRED_CHANNELS = ("msedge", "chrome", None)
 
@@ -426,7 +428,8 @@ class BrowserEngine:
         page = self._require_page()
         sid = "shot_" + uuid.uuid4().hex[:10]
         filename = f"{sid}.png"
-        path = SHOT_DIR / filename
+        # 未入库前写临时目录，不进截图库
+        path = TEMP_SHOT_DIR / filename
         try:
             page.screenshot(path=str(path), full_page=False, type="png")
         except Exception as e:  # noqa: BLE001
@@ -439,10 +442,38 @@ class BrowserEngine:
             "path": str(path),
             "file": filename,
             "time": time.time(),
+            "committed": False,
         }
         self.shots.append(rec)
         self.last_shot_id = sid
         return rec
+
+    def commit_shots(self, dest_dir) -> list[dict]:
+        """把临时截图移入项目截图库，返回提交后的记录。"""
+        import shutil
+
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        out = []
+        for s in self.shots:
+            if s.get("committed"):
+                out.append(s)
+                continue
+            src = Path(s.get("path") or "")
+            if src.exists():
+                dst = dest_dir / src.name
+                try:
+                    shutil.copy2(src, dst)
+                except OSError:
+                    dst = src
+                s = dict(s)
+                s["path"] = str(dst)
+                s["committed"] = True
+                out.append(s)
+            else:
+                out.append(s)
+        self.shots = out
+        return out
 
     def set_auto_screenshot(self, enabled: bool) -> dict:
         self.auto_screenshot = bool(enabled)
@@ -706,20 +737,28 @@ class BrowserEngine:
         return self._call(_inner)
 
     def resolve_shot_path(self, filename: str) -> Path | None:
-        """按文件名解析截图绝对路径（仅限 shots 目录内的普通文件）。"""
+        """按文件名解析截图绝对路径（临时目录或已入库目录）。"""
         safe = Path(filename).name
         if not safe or safe in (".", ".."):
             return None
-        root = SHOT_DIR.resolve()
-        for candidate in (SHOT_DIR / safe, SHOT_DIR / f"{safe}.png"):
-            try:
-                resolved = candidate.resolve()
-            except OSError:
-                continue
-            if resolved.parent != root and root not in resolved.parents:
-                continue
-            if resolved.is_file():
-                return resolved
+        roots = [TEMP_SHOT_DIR.resolve(), SHOT_DIR.resolve()]
+        # 项目目录
+        try:
+            proj = (OUTPUT_DIR.parent / "projects")
+            if proj.exists():
+                for d in proj.iterdir():
+                    if d.is_dir():
+                        roots.append((d / "shots").resolve())
+        except OSError:
+            pass
+        for root in roots:
+            for candidate in (root / safe, root / f"{safe}.png"):
+                try:
+                    resolved = candidate.resolve()
+                except OSError:
+                    continue
+                if resolved.is_file() and (resolved.parent == root or root in resolved.parents):
+                    return resolved
         return None
 
 

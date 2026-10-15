@@ -40,6 +40,7 @@ V3_HEADERS = [
     "携带参数",
     "执行状态",
     "截图路径",
+    "截图",
 ]
 
 
@@ -74,6 +75,7 @@ def _row(c: TestCase) -> list[str]:
         _cell(c.params),
         _cell(c.case_status or "未执行"),
         _cell(c.screenshot_path),
+        "[截图见嵌入/路径]",
     ]
 
 
@@ -88,6 +90,12 @@ def export_cases(cases: list[TestCase], fmt: str, base_name: str | None = None) 
     elif fmt == "md":
         path = OUTPUT_DIR / f"{name}.md"
         _to_md(cases, path)
+    elif fmt == "html":
+        path = OUTPUT_DIR / f"{name}.html"
+        _to_html(cases, path)
+    elif fmt == "json":
+        path = OUTPUT_DIR / f"{name}.json"
+        _to_json(cases, path)
     else:
         path = OUTPUT_DIR / f"{name}.csv"
         _to_csv(cases, path)
@@ -181,3 +189,44 @@ def _to_csv(cases: list[TestCase], path: Path) -> None:
     for c in cases:
         w.writerow(_row(c))
     path.write_text(buf.getvalue(), encoding="utf-8-sig")
+
+
+def _to_html(cases: list[TestCase], path: Path) -> None:
+    def td(v: str) -> str:
+        return (
+            _cell(v)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    rows = []
+    for c in cases:
+        cells = []
+        for v in _row(c):
+            cells.append(f"<td>{td(v)}</td>")
+        # 截图列用路径引用
+        img = c.screenshot_path or ""
+        if img:
+            cells[-1] = f'<td><a href="{td(img)}">{td(img)}</a></td>'
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    head = "".join(f"<th>{td(h)}</th>" for h in V3_HEADERS)
+    html = (
+        "<!doctype html><html><head><meta charset='utf-8'><title>功能测试用例</title>"
+        "<style>table{border-collapse:collapse;font:13px sans-serif}"
+        "th,td{border:1px solid #ccc;padding:6px;vertical-align:top}"
+        "th{background:#eee}</style></head><body>"
+        f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table></body></html>"
+    )
+    path.write_text(html, encoding="utf-8")
+
+
+def _to_json(cases: list[TestCase], path: Path) -> None:
+    import json
+
+    data = []
+    for c in cases:
+        d = c.model_dump()
+        d["screenshot_url"] = d.get("screenshot_path") or ""
+        data.append(d)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

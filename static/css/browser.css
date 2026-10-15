@@ -219,19 +219,49 @@
   overflow: auto;
 }
 
-/* 折叠 */
+/* 折叠：折叠后整块收紧高度 */
 .col-head.collapsible { cursor: pointer; user-select: none; }
 .collapse-body.grow {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.collapse-body.collapsed { display: none !important; }
-.collapse-toggle { flex-shrink: 0; }
-.col-head.collapsed-badge::after {
-  content: "";
+.collapse-body.collapsed {
+  display: none !important;
 }
+/* 全部 body 折叠时，容器高度只保留标题 */
+.tree-panel:has(#tree-body.collapsed),
+.side-panel:has(.collapse-body:not(.collapsed)),
+.cases-panel:has(#cases-body.collapsed),
+.elements-panel:has(#el-body.collapsed) {
+  /* 占位交给 flex 收缩 */
+}
+.tree-panel, .side-panel, .elements-panel, .cases-panel {
+  transition: flex-basis 0.15s ease;
+}
+.tree-panel:has(#tree-body.collapsed) {
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+}
+.elements-panel:has(#el-body.collapsed) {
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+}
+.cases-panel:has(#cases-body.collapsed) {
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+}
+/* side-panel 内多个折叠体全关时，整块收紧 */
+.side-panel:has(.collapse-body.collapsed:nth-last-child(1)) {
+  /* 无法精确时由内容自然收缩 */
+}
+.side-panel .collapse-body.collapsed {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.collapse-toggle { flex-shrink: 0; }
 .splitter {
   background: transparent;
   position: relative;
@@ -779,3 +809,32 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+
+/* 下拉 */
+.drop { position: relative; display: inline-block; }
+.drop-menu {
+  position: absolute;
+  top: 110%;
+  left: 0;
+  z-index: 50;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-width: 150px;
+  box-shadow: 0 8px 20px rgba(0,0,0,.12);
+  padding: 4px;
+}
+.drop-menu.hidden { display: none; }
+.drop-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.drop-menu button:hover { background: #f3f4f6; }

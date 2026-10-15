@@ -110,8 +110,9 @@ class CaseUpdate(BaseModel):
 
 class ExportRequest(BaseModel):
     session_id: str
-    format: Literal["xlsx", "md", "csv"] = "xlsx"
+    format: Literal["xlsx", "md", "csv", "html", "json"] = "xlsx"
     case_ids: list[str] = Field(default_factory=list)
+    point_ids: list[str] = Field(default_factory=list)
 
 
 class SessionState(BaseModel):
