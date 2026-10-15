@@ -931,8 +931,12 @@ function renderTree() {
   });
 }
 
+function selectedTreeIds() {
+  return Array.from(state.checkedIds || []);
+}
+
 $("#btn-del-tree-selected").addEventListener("click", async () => {
-  const ids = $$("#tree .tree-check:checked").map((x) => x.dataset.id);
+  const ids = selectedTreeIds();
   if (!ids.length) return toast("请勾选要删除的节点", "err");
   if (!confirm(`确认删除 ${ids.length} 个节点及其子节点？`)) return;
   for (const id of ids) {
@@ -949,7 +953,7 @@ $("#btn-del-tree-selected").addEventListener("click", async () => {
 
 /* 批量移动 */
 $("#btn-move-tree-selected").addEventListener("click", () => {
-  const ids = $$("#tree .tree-check:checked").map((x) => x.dataset.id);
+  const ids = selectedTreeIds();
   if (!ids.length) return toast("请勾选要移动的节点", "err");
   // 合并所有选中及其子节点
   const all = new Set(ids);
@@ -1248,7 +1252,7 @@ $("#export-menu") &&
     const fmt = e.target.dataset && e.target.dataset.fmt;
     if (!fmt) return;
     $("#export-menu").classList.add("hidden");
-    const ids = $$("#tree .tree-check:checked").map((x) => x.dataset.id);
+    const ids = selectedTreeIds();
     if (!ids.length) return toast("请勾选要导出的功能点树节点", "err");
     try {
       const r = await api("/api/browser/cases/from-tree", {
