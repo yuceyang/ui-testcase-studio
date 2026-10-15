@@ -16,6 +16,7 @@ const state = {
   liveReady: false,
   projectCases: [],
   committedCases: [],
+  checkedIds: new Set(),
 };
 
 let liveTimer = null;
@@ -134,9 +135,11 @@ async function loadProject() {
     window._lastCases = [];
     renderTree();
     renderMarked();
-    renderPreview({ cases: [], mode: "preview" });
+    // 生成台保持清空；已入库只在树上
+    $("#case-preview").innerHTML =
+      `<div class="muted">项目已加载：已入库 ${state.committedCases.length} 条（见功能点树）。生成台仅显示未入库预览。</div>`;
     await loadShotList();
-    toast(`已加载 ${r.project.name}（恢复登录:${r.restored_login ? "是" : "否"}）`, "ok");
+    toast(`已加载 ${r.project.name}（用例 ${state.committedCases.length} · 恢复登录:${r.restored_login ? "是" : "否"}）`, "ok");
   } catch (e) {
     toast(e.message, "err");
   }
@@ -848,7 +851,9 @@ function renderTree() {
       .map(
         (c) => `
       <div class="tree-node tree-case" data-id="${c.id}" data-point="${c.point_id || ""}">
-        <input type="checkbox" class="tree-check" data-id="${c.id}" />
+        <input type="checkbox" class="tree-check" data-id="${c.id}" ${
+          state.checkedIds.has(c.id) ? "checked" : ""
+        } />
         <span class="badge-sm case">用例</span>
         <span class="nm">${esc(c.case_no || "")} ${esc((c.title || "").slice(0, 24))}</span>
       </div>`
@@ -856,7 +861,9 @@ function renderTree() {
       .join("");
     return `
       <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}">
-        <input type="checkbox" class="tree-check" data-id="${n.id}" title="多选以便批量删除" />
+        <input type="checkbox" class="tree-check" data-id="${n.id}" title="多选以便批量删除" ${
+          state.checkedIds.has(n.id) ? "checked" : ""
+        } />
         <span class="badge-sm ${n.node_type}">${typeLabel[n.node_type] || n.node_type}</span>
         <span class="nm">${esc(n.name)}</span>
         ${cnt ? `<span class="case-cnt" title="测试用例数">${cnt}</span>` : ""}
@@ -904,13 +911,21 @@ function renderTree() {
     }
   });
   $("#tree").querySelectorAll(".tree-check").forEach((cb) => {
+    const id = cb.dataset.id;
     cb.addEventListener("click", (ev) => ev.stopPropagation());
+    cb.addEventListener("mousedown", (ev) => ev.stopPropagation());
     cb.addEventListener("change", (ev) => {
       ev.stopPropagation();
-      const id = cb.dataset.id;
+      if (cb.checked) state.checkedIds.add(id);
+      else state.checkedIds.delete(id);
+      // 级联子节点
       const ids = descendantsOf(id);
       $$("#tree .tree-check").forEach((x) => {
-        if (ids.has(x.dataset.id)) x.checked = cb.checked;
+        if (ids.has(x.dataset.id)) {
+          x.checked = cb.checked;
+          if (cb.checked) state.checkedIds.add(x.dataset.id);
+          else state.checkedIds.delete(x.dataset.id);
+        }
       });
     });
   });
@@ -979,11 +994,13 @@ async function loadTree() {
 }
 
 function showCasesForNode(nodeId) {
-  const ids = descendantsOf(nodeId);
-  const all = state.committedCases || [];
-  const list = all.filter((c) => ids.has(c.point_id) || ids.has(c.id));
-  if (list.length) {
-    renderPreview({ cases: list, mode: "committed" });
+  // 已入库用例只在树上展示，不进入「未入库」生成台
+  const has = (state.committedCases || []).some(
+    (c) => c.point_id === nodeId || descendantsOf(nodeId).has(c.point_id)
+  );
+  if (has) {
+    $("#case-preview").innerHTML =
+      `<div class="muted">该节点已有入库用例，请在左侧树上查看（黄色「用例」节点）。</div>`;
     return;
   }
   api("/api/browser/tree/preview-cases", {
@@ -999,7 +1016,7 @@ function showCasesForNode(nodeId) {
     })
     .catch(() => {
       $("#case-preview").innerHTML =
-        '<div class="muted">该节点暂无已入库用例。可「预览/生成入库」</div>';
+        '<div class="muted">暂无可预览用例，可点「预览 / 生成入库」</div>';
     });
 }
 
