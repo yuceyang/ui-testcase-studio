@@ -71,14 +71,38 @@
 
 /* 顶栏精简 */
 .topbar.slim {
-  padding: 8px 12px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
-.slim-brand {
+.project-bar {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  min-width: 0;
 }
-.slim-brand b {
-  color: var(--accent);
-  font-size: 14px;
+.proj-label {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.project-bar select {
+  min-width: 180px;
+  max-width: 260px;
+}
+.btn.sm {
+  padding: 6px 12px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .workspace {
@@ -116,40 +140,55 @@
 .browser-chrome {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px;
-  background: #2b3648;
-  border-radius: 8px 8px 0 0;
+  gap: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #2f3c50 0%, #273244 100%);
+  border-radius: 10px 10px 0 0;
 }
 .chrome-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   border: none;
   background: #3d4b61;
   color: #e5e7eb;
   cursor: pointer;
   font-size: 16px;
+  transition: background .15s;
 }
+.chrome-btn:hover { background: #4b5b73; }
 .chrome-url {
   flex: 1;
-  height: 34px;
-  border-radius: 17px;
-  border: none;
-  padding: 0 14px;
+  height: 36px;
+  border-radius: 18px;
+  border: 1px solid transparent;
+  padding: 0 16px;
   background: #1b2433;
   color: #f3f4f6;
   outline: none;
   font-size: 13px;
 }
+.chrome-url:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,.25);
+}
 .chrome-go {
-  height: 34px;
-  padding: 0 14px;
+  height: 36px;
+  padding: 0 18px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--accent);
   color: #fff;
   cursor: pointer;
+  font-weight: 550;
+}
+.chrome-go:hover { background: var(--accent-hover); }
+
+.live-hint {
+  padding: 6px 12px;
+  background: #1e293b;
+  color: #94a3b8 !important;
+  font-size: 11.5px;
 }
 
 .live-wrap {
@@ -337,12 +376,25 @@
   font-size: 13px;
   background: #fafbfc;
 }
+.col-head b { font-weight: 600; }
 .hint-line {
   padding: 6px 12px;
   font-size: 11px;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
 }
+.status-box { padding: 10px 12px; }
+.shot-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.shot-item:hover { background: #f8fafc; border-color: #c7d2fe; }
 .muted { color: var(--muted); font-size: 12px; font-weight: 400; }
 
 .mini {

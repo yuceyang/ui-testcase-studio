@@ -10,20 +10,19 @@
 <body>
   <!-- 顶栏：项目 + 紧凑操作 -->
   <header class="topbar slim">
-    <div class="brand slim-brand">
-      <b>QT</b>
-      <select id="project-select" title="项目"></select>
-      <button class="mini" id="btn-new-project">新建项目</button>
-      <button class="mini" id="btn-save-project">保存项目</button>
-      <button class="mini" id="btn-load-project">加载</button>
-      <input id="project-name" placeholder="项目名" style="width:140px;display:none" />
+    <div class="project-bar">
+      <span class="proj-label">项目</span>
+      <select id="project-select" title="切换项目"></select>
+      <button class="btn ghost sm" id="btn-new-project">新建</button>
+      <button class="btn ghost sm" id="btn-save-project">保存</button>
+      <button class="btn ghost sm" id="btn-load-project">加载</button>
     </div>
     <div class="top-actions">
-      <button id="btn-start" class="btn accent">启动浏览器</button>
-      <button id="btn-extract" class="btn">自动发现元素</button>
-      <button id="btn-auto-tree" class="btn">自动建树</button>
-      <button id="btn-go-cases" class="btn accent">生成用例</button>
-      <button id="btn-config" class="btn ghost">模型</button>
+      <button id="btn-start" class="btn accent sm">启动浏览器</button>
+      <button id="btn-extract" class="btn sm">发现元素</button>
+      <button id="btn-auto-tree" class="btn sm">自动建树</button>
+      <button id="btn-go-cases" class="btn accent sm">生成用例</button>
+      <button id="btn-config" class="btn ghost sm">模型</button>
       <span id="br-status" class="badge">未启动</span>
     </div>
   </header>

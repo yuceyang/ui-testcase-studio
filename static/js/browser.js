@@ -864,7 +864,7 @@ $("#btn-auto-tree").addEventListener("click", async () => {
   try {
     const r = await api("/api/browser/discover-tree", {
       method: "POST",
-      body: { module_name: $("#project-name").value || "核心业务" },
+      body: { module_name: "核心业务" },
     });
     state.tree = r.tree || [];
     state.elements = r.elements || state.elements;
