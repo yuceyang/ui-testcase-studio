@@ -332,11 +332,17 @@ def api_export(req: ExportRequest) -> dict:
     if req.case_ids:
         idset = set(req.case_ids)
         cases = [c for c in cases if c.id in idset]
+    if req.point_ids:
+        pids = set(req.point_ids)
+        cases = [c for c in cases if c.point_id in pids]
     cases = [c for c in cases if c.approved]
     if not cases:
         raise HTTPException(400, "没有已通过审阅的用例")
 
-    path = export_cases(cases, req.format)
+    try:
+        path = export_cases(cases, req.format)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"导出失败: {e}") from e
     return {"ok": True, "path": str(path), "count": len(cases)}
 
 

@@ -1277,6 +1277,38 @@ $("#add-menu") &&
 
 $("#export-menu") &&
   $("#export-menu").addEventListener("click", async (e) => {
+    const fmt = e.target && e.target.dataset && e.target.dataset.fmt;
+    if (!fmt) return;
+    $("#export-menu").classList.add("hidden");
+    const ids = selectedTreeIds();
+    if (!ids.length) return toast("请先勾选功能点树节点", "err");
+    try {
+      const r = await api("/api/browser/cases/from-tree", {
+        method: "POST",
+        body: {
+          extra: { include_negative: true, include_auth_cases: true },
+          point_ids: ids,
+          sys_name: "",
+          replace: true,
+        },
+      });
+      state.sessionId = r.session_id;
+      state.committedCases = r.cases || [];
+      renderTree();
+      const ex = await api("/api/export", {
+        method: "POST",
+        body: { session_id: r.session_id, format: fmt, point_ids: ids },
+      });
+      const name = (ex.path || "").split(/[\\/]/).pop();
+      window.open(`/api/export/download/${encodeURIComponent(name)}`, "_blank");
+      toast(`已导出 ${fmt.toUpperCase()}（${ex.count} 条）`, "ok");
+    } catch (err) {
+      toast("导出失败: " + err.message, "err");
+    }
+  });
+
+$("#export-menu") &&
+  $("#export-menu").addEventListener("click", async (e) => {
     const fmt = e.target.dataset && e.target.dataset.fmt;
     if (!fmt) return;
     $("#export-menu").classList.add("hidden");
