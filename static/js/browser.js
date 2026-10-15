@@ -267,7 +267,8 @@ function stageToViewport(clientX, clientY) {
 
 $("#live-img").addEventListener("click", async (ev) => {
   hideCtx();
-  $("#live-stage").focus();
+  // 聚焦 IME 代理，宿主输入法才可组字
+  focusIme();
   const { x, y } = stageToViewport(ev.clientX, ev.clientY);
   const cross = $("#live-cross");
   const img = $("#live-img");
@@ -280,6 +281,98 @@ $("#live-img").addEventListener("click", async (ev) => {
   } catch (e) {
     toast(e.message, "err");
   }
+});
+
+/* ===== 输入法（IME）===== */
+let imeComposing = false;
+
+function focusIme() {
+  const p = $("#ime-proxy");
+  if (!p) return;
+  $("#live-stage").focus();
+  p.focus();
+}
+
+function sendText(text) {
+  if (!text || !state.liveReady) return Promise.resolve();
+  return api("/api/browser/live/insert", { method: "POST", body: { text } });
+}
+
+function sendKey(key) {
+  if (!state.liveReady) return Promise.resolve();
+  return api("/api/browser/live/press", { method: "POST", body: { key } });
+}
+
+const ime = $("#ime-proxy");
+if (ime) {
+  ime.addEventListener("compositionstart", () => {
+    imeComposing = true;
+  });
+  ime.addEventListener("compositionend", async (e) => {
+    imeComposing = false;
+    const text = e.data || ime.value || "";
+    ime.value = "";
+    if (text) {
+      await sendText(text);
+      await refreshLiveFrame();
+    }
+  });
+  ime.addEventListener("input", async (e) => {
+    // 组字过程中不发；完成后由 compositionend 发送
+    if (imeComposing || e.isComposing) return;
+    // 部分输入法/粘贴不触发 compositionend
+    const v = ime.value;
+    if (!v) return;
+    ime.value = "";
+    await sendText(v);
+    await refreshLiveFrame();
+  });
+  ime.addEventListener("keydown", async (ev) => {
+    // 组字中的按键（229）一律放行给输入法
+    if (imeComposing || ev.isComposing || ev.keyCode === 229) return;
+
+    const keyMapSpecial = {
+      Enter: "Enter",
+      Tab: "Tab",
+      Backspace: "Backspace",
+      Escape: "Escape",
+      ArrowUp: "ArrowUp",
+      ArrowDown: "ArrowDown",
+      ArrowLeft: "ArrowLeft",
+      ArrowRight: "ArrowRight",
+      Delete: "Delete",
+    };
+    if (keyMapSpecial[ev.key]) {
+      ev.preventDefault();
+      ime.value = "";
+      await sendKey(keyMapSpecial[ev.key]);
+      await refreshLiveFrame();
+      return;
+    }
+    if (ev.ctrlKey || ev.metaKey) {
+      const m = { a: "Control+a", c: "Control+c", v: "Control+v", x: "Control+x" };
+      const k = (ev.key || "").toLowerCase();
+      if (m[k]) {
+        ev.preventDefault();
+        await sendKey(m[k]);
+      }
+      return;
+    }
+    // 普通单字符走 input/composition，这里不 preventDefault，保证 IME 用候选窗
+  });
+  ime.addEventListener("paste", async (ev) => {
+    ev.preventDefault();
+    const text = (ev.clipboardData || window.clipboardData).getData("text");
+    if (text) {
+      await sendText(text);
+      await refreshLiveFrame();
+    }
+  });
+}
+
+// 点镜像空白（非图片）也聚焦
+$("#live-stage").addEventListener("mousedown", (ev) => {
+  if (ev.target.id === "live-stage" || ev.target.id === "live-empty") focusIme();
 });
 
 $("#live-stage").addEventListener(
@@ -295,36 +388,16 @@ $("#live-stage").addEventListener(
   { passive: false }
 );
 
-// 键盘直操（对齐浏览器）
-const keyMapSpecial = {
-  Enter: "Enter",
-  Tab: "Tab",
-  Backspace: "Backspace",
-  Escape: "Escape",
-  ArrowUp: "ArrowUp",
-  ArrowDown: "ArrowDown",
-  ArrowLeft: "ArrowLeft",
-  ArrowRight: "ArrowRight",
-  Delete: "Delete",
-};
-
-$("#live-stage").addEventListener("keydown", async (ev) => {
-  if (!state.liveReady) return;
-  // 允许 Ctrl+R 等不劫持刷新页面本体
-  if (ev.ctrlKey && ["r", "R"].includes(ev.key)) return;
+// 键盘焦点统一交给 IME 代理（避免 keydown 拦截组字）
+$("#live-stage").addEventListener("keydown", (ev) => {
+  if (ev.target.id === "ime-proxy") return;
+  // 舞台上的按键转到代理，保证输入法可用
+  focusIme();
   ev.preventDefault();
-  try {
-    if (keyMapSpecial[ev.key]) {
-      await api("/api/browser/live/press", { method: "POST", body: { key: keyMapSpecial[ev.key] } });
-    } else if (ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey) {
-      await api("/api/browser/live/insert", { method: "POST", body: { text: ev.key } });
-    } else if (ev.ctrlKey && ["a", "A", "c", "C", "v", "V", "x", "X"].includes(ev.key)) {
-      const m = { a: "Control+a", c: "Control+c", v: "Control+v", x: "Control+x" };
-      await api("/api/browser/live/press", { method: "POST", body: { key: m[ev.key.toLowerCase()] } });
-    }
-    await refreshLiveFrame();
-  } catch (e) {
-    /* ignore */
+  const imeEl = $("#ime-proxy");
+  if (imeEl && ev.key && ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey) {
+    imeEl.value += ev.key;
+    imeEl.dispatchEvent(new Event("input", { bubbles: true }));
   }
 });
 
