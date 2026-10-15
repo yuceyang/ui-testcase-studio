@@ -104,21 +104,22 @@ async function saveProject(silent = false) {
     toast(e.message, "err");
   }
 }
-$("#btn-save-project").addEventListener("click", () => saveProject(false));
-$("#btn-load-project").addEventListener("click", () => loadProject());
-$("#btn-del-project").addEventListener("click", async () => {
-  if (!state.projectId) return toast("请先选择项目", "err");
-  if (!confirm("确认删除该项目及其本地数据？")) return;
-  try {
-    await api(`/api/projects/${state.projectId}`, { method: "DELETE" });
-    state.projectId = "";
-    localStorage.removeItem("qts_project_id");
-    await loadProjectList();
-    toast("项目已删除", "ok");
-  } catch (e) {
-    toast(e.message, "err");
-  }
-});
+let _saveTimer = null;
+function scheduleAutoSave(delay = 800) {
+  if (!state.projectId) return;
+  clearTimeout(_saveTimer);
+  const tip = $("#autosave-tip");
+  if (tip) tip.textContent = "保存中…";
+  _saveTimer = setTimeout(async () => {
+    try {
+      await saveProject(true);
+      if (tip) tip.textContent = "已自动保存 " + new Date().toLocaleTimeString();
+    } catch (e) {
+      if (tip) tip.textContent = "保存失败";
+    }
+  }, delay);
+}
+
 
 async function loadProject() {
   if (!state.projectId) return toast("未选项目", "err");
@@ -993,11 +994,12 @@ $("#btn-save-move").addEventListener("click", async () => {
   }
 });
 
-async function loadTree() {
+async function loadTree(opts = {}) {
   try {
     const r = await api("/api/browser/tree");
     state.tree = r.tree || [];
     renderTree();
+    scheduleAutoSave();
   } catch {
     /* ignore */
   }
