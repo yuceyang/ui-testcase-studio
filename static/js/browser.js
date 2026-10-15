@@ -195,23 +195,6 @@ async function ensureBrowser() {
   }
 }
 
-$("#btn-start").addEventListener("click", async () => {
-  try {
-    await api("/api/browser/start", { method: "POST", body: { headless: true } });
-    // 重启清空残留识别框
-    state.elements = [];
-    renderElements();
-    drawGhost();
-    startLive();
-    setLiveVisible(true);
-    await loadLiveMeta(false);
-    refreshStatus();
-    toast("浏览器已启动，可在地址栏输入网址或直接关闭", "ok");
-  } catch (e) {
-    toast(e.message, "err");
-  }
-});
-
 $("#btn-stop").addEventListener("click", async () => {
   try {
     await api("/api/browser/close", { method: "POST", body: {} });
@@ -232,6 +215,8 @@ async function goAddress() {
   if (!url) return toast("请输入地址", "err");
   try {
     await ensureBrowser();
+    startLive();
+    setLiveVisible(true);
     const r = await api("/api/browser/live/navigate", { method: "POST", body: { url } });
     // 换页清叠框
     state.elements = [];
@@ -239,7 +224,7 @@ async function goAddress() {
     drawGhost();
     await refreshLiveFrame();
     refreshStatus();
-    toast("已导航", "ok");
+    toast("已导航，可在镜像内点击登录", "ok");
   } catch (e) {
     toast(e.message, "err");
   }
