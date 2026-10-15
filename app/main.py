@@ -332,9 +332,7 @@ def api_export(req: ExportRequest) -> dict:
     if req.case_ids:
         idset = set(req.case_ids)
         cases = [c for c in cases if c.id in idset]
-    if req.point_ids:
-        pids = set(req.point_ids)
-        cases = [c for c in cases if c.point_id in pids]
+    # point_ids 仅在显式 case_ids 未给出时用于兼容；生成阶段已按树过滤
     cases = [c for c in cases if c.approved]
     if not cases:
         raise HTTPException(400, "没有已通过审阅的用例")
