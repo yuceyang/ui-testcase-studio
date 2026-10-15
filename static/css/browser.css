@@ -83,11 +83,17 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex-wrap: nowrap;
+}
+.project-bar .btn {
+  flex-shrink: 0;
 }
 .proj-label {
   color: var(--muted);
   font-size: 12px;
   letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .project-bar select {
   min-width: 180px;
