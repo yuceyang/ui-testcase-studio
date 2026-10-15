@@ -1029,7 +1029,12 @@ function selectedTreeIds() {
 $("#btn-del-tree-selected").addEventListener("click", async () => {
   const ids = selectedTreeIds();
   if (!ids.length) return toast("请勾选要删除的节点", "err");
-  if (!confirm(`确认删除 ${ids.length} 个节点及其子节点？`)) return;
+  if (!confirm(`确认删除 ${ids.length} 个节点及其子节点和关联用例？`)) return;
+  const all = new Set();
+  ids.forEach((id) => {
+    all.add(id);
+    descendantsOf(id).forEach((x) => all.add(x));
+  });
   for (const id of ids) {
     try {
       await api(`/api/browser/tree/node/${id}`, { method: "DELETE" });
@@ -1037,9 +1042,18 @@ $("#btn-del-tree-selected").addEventListener("click", async () => {
       /* ignore */
     }
   }
-  if (ids.includes(state.selectedNodeId)) state.selectedNodeId = null;
+  // 同步删掉子树关联用例，避免加载后复活
+  state.committedCases = (state.committedCases || []).filter(
+    (c) => !all.has(c.point_id) && !all.has(c.id)
+  );
+  state.projectCases = state.committedCases;
+  state.checkedIds = new Set(
+    Array.from(state.checkedIds).filter((x) => !all.has(x))
+  );
+  if (state.selectedNodeId && all.has(state.selectedNodeId)) state.selectedNodeId = null;
   await loadTree();
-  toast(`已删除 ${ids.length} 个节点`, "ok");
+  scheduleAutoSave();
+  toast(`已删除 ${ids.length} 个节点及其用例`, "ok");
 });
 
 /* 批量移动 */
@@ -1274,11 +1288,18 @@ $("#btn-save-node").addEventListener("click", async () => {
 });
 
 $("#btn-del-node").addEventListener("click", async () => {
-  if (!confirm("删除节点及其子节点？")) return;
+  if (!confirm("删除节点及其子节点和关联用例？")) return;
+  const id = $("#mn-id").value;
   try {
-    await api(`/api/browser/tree/node/${$("#mn-id").value}`, { method: "DELETE" });
+    await api(`/api/browser/tree/node/${id}`, { method: "DELETE" });
+    const all = new Set([id, ...descendantsOf(id)]);
+    state.committedCases = (state.committedCases || []).filter(
+      (c) => !all.has(c.point_id) && !all.has(c.id)
+    );
+    state.projectCases = state.committedCases;
     $("#modal-node").classList.add("hidden");
     await loadTree();
+    scheduleAutoSave();
   } catch (e) {
     toast(e.message, "err");
   }
