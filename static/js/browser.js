@@ -96,14 +96,19 @@ async function saveProject(silent = false) {
     if (!silent) toast("请先新建/选择项目", "err");
     return;
   }
-  try {
-    const r = await api(`/api/projects/${state.projectId}/save-from-engine`, { method: "POST", body: {} });
-    const p = r.project || {};
-    if (!silent) toast(`已保存（树 ${p.tree?.length || 0} / 已标 ${p.marked_elements?.length || 0}）`, "ok");
-    await loadShotList();
-  } catch (e) {
-    toast(e.message, "err");
-  }
+  return api(`/api/projects/${state.projectId}/save-from-engine`, {
+    method: "POST",
+    body: { cases: state.committedCases || [] },
+  })
+    .then(async (r) => {
+      const p = r.project || {};
+      if (!silent) toast(`已保存（树 ${p.tree?.length || 0} / 用例 ${p.cases?.length || 0}）`, "ok");
+      await loadShotList();
+    })
+    .catch((e) => {
+      if (!silent) toast(e.message, "err");
+      else throw e;
+    });
 }
 let _saveTimer = null;
 function scheduleAutoSave(delay = 800) {
