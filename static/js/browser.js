@@ -134,8 +134,7 @@ async function loadProject() {
     state.committedCases = r.project.cases || [];
     window._lastCases = [];
     renderTree();
-    renderMarked();
-    // 生成台保持清空；已入库只在树上
+    await loadMarked();
     $("#case-preview").innerHTML =
       `<div class="muted">项目已加载：已入库 ${state.committedCases.length} 条（见功能点树）。生成台仅显示未入库预览。</div>`;
     await loadShotList();
@@ -998,30 +997,18 @@ async function loadTree() {
 }
 
 function showCasesForNode(nodeId) {
-  // 已入库用例只在树上展示，不进入「未入库」生成台
+  // 已入库：只在树上；未入库生成台不展示
   const has = (state.committedCases || []).some(
     (c) => c.point_id === nodeId || descendantsOf(nodeId).has(c.point_id)
   );
   if (has) {
     $("#case-preview").innerHTML =
-      `<div class="muted">该节点已有入库用例，请在左侧树上查看（黄色「用例」节点）。</div>`;
+      `<div class="muted">该节点已入库用例在左侧树上（黄色「用例」）。此处仅未入库预览。</div>`;
     return;
   }
-  api("/api/browser/tree/preview-cases", {
-    method: "POST",
-    body: {
-      include_negative: true,
-      include_auth_cases: true,
-      point_ids: [nodeId],
-    },
-  })
-    .then((r) => {
-      renderPreview({ cases: r.cases || [], mode: "preview" });
-    })
-    .catch(() => {
-      $("#case-preview").innerHTML =
-        '<div class="muted">暂无可预览用例，可点「预览 / 生成入库」</div>';
-    });
+  // 未入库：默认不自动刷入，需点「预览」
+  $("#case-preview").innerHTML =
+    `<div class="muted">该节点尚无入库用例。点「预览」试生成，或「生成入库」写入树。</div>`;
 }
 
 function selectNode(id) {
