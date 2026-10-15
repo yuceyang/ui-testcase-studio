@@ -911,19 +911,26 @@ function renderTree() {
   });
   $("#tree").querySelectorAll(".tree-check").forEach((cb) => {
     const id = cb.dataset.id;
+    const owner = cb.closest(".tree-node");
+    const ownerPoint = owner && owner.dataset.point;
     cb.addEventListener("click", (ev) => ev.stopPropagation());
     cb.addEventListener("mousedown", (ev) => ev.stopPropagation());
     cb.addEventListener("change", (ev) => {
       ev.stopPropagation();
       if (cb.checked) state.checkedIds.add(id);
       else state.checkedIds.delete(id);
-      // 级联子节点
+      // 级联：子树节点 + 挂在子节点下的用例（用例不在 tree 数组）
       const ids = descendantsOf(id);
+      ids.add(id);
       $$("#tree .tree-check").forEach((x) => {
-        if (ids.has(x.dataset.id)) {
+        const el = x.closest(".tree-node");
+        const cid = x.dataset.id;
+        const pid = el && el.dataset.point;
+        const hit = ids.has(cid) || (pid && ids.has(pid));
+        if (hit) {
           x.checked = cb.checked;
-          if (cb.checked) state.checkedIds.add(x.dataset.id);
-          else state.checkedIds.delete(x.dataset.id);
+          if (cb.checked) state.checkedIds.add(cid);
+          else state.checkedIds.delete(cid);
         }
       });
     });
@@ -1560,14 +1567,11 @@ $("#btn-build-cases").addEventListener("click", async () => {
     state.projectCases = state.committedCases;
     window._lastCases = [];
     if (state.projectId) {
-      api(`/api/projects/${state.projectId}`, {
-        method: "PUT",
-        body: { cases: state.committedCases },
-      }).catch(() => {});
-      api(`/api/projects/${state.projectId}/save-from-engine`, {
+      // 原子保存：cases + 树一起写
+      await api(`/api/projects/${state.projectId}/save-from-engine`, {
         method: "POST",
-        body: {},
-      }).catch(() => {});
+        body: { cases: state.committedCases },
+      }).catch((e) => toast("保存项目失败: " + e.message, "err"));
     }
     renderTree();
     $("#case-preview").innerHTML =

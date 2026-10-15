@@ -118,8 +118,8 @@ class ProjectStore:
             return True
         return False
 
-    def update_from_engine(self, pid: str, engine) -> dict:
-        """把引擎里当前树/已标/截图/备注刷进项目。"""
+    def update_from_engine(self, pid: str, engine, cases: list | None = None) -> dict:
+        """把引擎里当前树/已标/截图/备注刷进项目；cases 不为空则写入。"""
         data = self.load(pid) or {
             "id": _safe_id(pid),
             "name": pid,
@@ -134,6 +134,10 @@ class ProjectStore:
         data["marked_elements"] = engine.list_marked()
         data["notes"] = engine.list_notes()
         data["shots"] = engine.list_shots()
+        if cases is not None:
+            data["cases"] = cases
+        # 兜底：始终保留已有 cases 字段
+        data.setdefault("cases", [])
         cur = engine.current()
         if cur.get("url"):
             data.setdefault("meta", {})

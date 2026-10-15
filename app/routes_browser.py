@@ -523,14 +523,16 @@ def delete_project(pid: str):
 
 
 @projects_router.post("/{pid}/save-from-engine")
-def save_from_engine(pid: str):
+def save_from_engine(pid: str, payload: dict | None = None):
     eng = get_engine()
+    payload = payload or {}
+    cases = payload.get("cases")
     # 截图入库
     try:
         eng.commit_shots(project_store.shots_dir(pid))
     except Exception:
         pass
-    saved = project_store.update_from_engine(pid, eng)
+    saved = project_store.update_from_engine(pid, eng, cases=cases)
     # 顺带保存登录态（必须在 Playwright 线程）
     try:
         if eng.is_running():
