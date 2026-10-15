@@ -121,7 +121,24 @@ function scheduleAutoSave(delay = 800) {
   }, delay);
 }
 
-$("#btn-load-project").addEventListener("click", () => loadProject());
+async function flushSave() {
+  if (!state.projectId) return;
+  clearTimeout(_saveTimer);
+  const tip = $("#autosave-tip");
+  if (tip) tip.textContent = "保存中…";
+  await saveProject(true);
+  if (tip) tip.textContent = "已自动保存 " + new Date().toLocaleTimeString();
+}
+
+$("#btn-load-project").addEventListener("click", async () => {
+  // 加载前先落盘，避免防抖未写完导致旧数据回滚
+  try {
+    await flushSave();
+  } catch {
+    /* ignore */
+  }
+  await loadProject();
+});
 $("#btn-del-project").addEventListener("click", async () => {
   if (!state.projectId) return toast("请先选择项目", "err");
   if (!confirm("确认删除该项目及其本地数据？")) return;
@@ -1052,7 +1069,7 @@ $("#btn-del-tree-selected").addEventListener("click", async () => {
   );
   if (state.selectedNodeId && all.has(state.selectedNodeId)) state.selectedNodeId = null;
   await loadTree();
-  scheduleAutoSave();
+  await flushSave();
   toast(`已删除 ${ids.length} 个节点及其用例`, "ok");
 });
 
@@ -1299,7 +1316,7 @@ $("#btn-del-node").addEventListener("click", async () => {
     state.projectCases = state.committedCases;
     $("#modal-node").classList.add("hidden");
     await loadTree();
-    scheduleAutoSave();
+    await flushSave();
   } catch (e) {
     toast(e.message, "err");
   }
