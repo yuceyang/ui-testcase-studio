@@ -305,6 +305,16 @@ def preview_cases(payload: dict | None = None):
     cases = build_cases_from_tree(
         tree, eng.list_marked(), e, sys_name=sys_name, shots=eng.list_shots()
     )
+    pids = set(payload.get("point_ids") or [])
+    if pids:
+        from .browser.tree import path_of
+
+        cases = [
+            c
+            for c in cases
+            if c.point_id in pids
+            or any(n.get("id") in pids for n in path_of(c.point_id, tree))
+        ]
     return {
         "ok": True,
         "count": len(cases),

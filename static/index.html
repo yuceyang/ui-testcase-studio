@@ -15,6 +15,7 @@
       <button class="btn ghost sm" id="btn-new-project">新建</button>
       <button class="btn ghost sm" id="btn-save-project">保存</button>
       <button class="btn ghost sm" id="btn-load-project">加载</button>
+      <button class="btn ghost sm" id="btn-del-project">删除项目</button>
     </div>
     <div class="top-actions">
       <button id="btn-stop" class="btn sm">关闭浏览器</button>
@@ -32,7 +33,7 @@
     <div class="col-stack left-stack" id="left-stack">
       <section class="col tree-panel" id="tree-panel">
         <div class="col-head collapsible" data-collapse="tree-body">
-          <b>功能点树</b>
+          <b>功能点树 <span class="badge" id="tree-case-total">0 用例</span></b>
           <div>
             <div class="drop">
               <button class="mini" id="btn-add-menu">＋新增</button>
@@ -83,8 +84,8 @@
         <div class="browser-chrome" id="browser-chrome">
           <button id="btn-back" class="chrome-btn" title="后退">←</button>
           <button id="btn-reload" class="chrome-btn" title="刷新">⟳</button>
-          <input id="addr-url" class="chrome-url" spellcheck="false"
-                 placeholder="https://目标系统，镜像内点击登录（支持中文输入/粘贴）" />
+          <input id="addr-url" class="chrome-url" spellcheck="false" value=""
+                 placeholder="输入目标系统地址后点「前往」" />
           <button id="btn-go" class="chrome-go">前往</button>
           <button id="btn-popout" class="chrome-btn" title="弹出">⧉</button>
           <span class="zoom-box">

@@ -848,3 +848,13 @@
   background: #fafbfc;
 }
 .subsec b { display: block; margin-bottom: 8px; }
+
+.case-cnt {
+  margin-left: auto;
+  background: #e0e7ff;
+  color: #3730a3;
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 11px;
+  flex-shrink: 0;
+}

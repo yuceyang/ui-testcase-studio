@@ -14,6 +14,7 @@ const state = {
   frameTree: [],
   projectId: localStorage.getItem("qts_project_id") || "",
   liveReady: false,
+  projectCases: [],
 };
 
 let liveTimer = null;
@@ -103,6 +104,19 @@ async function saveProject(silent = false) {
 }
 $("#btn-save-project").addEventListener("click", () => saveProject(false));
 $("#btn-load-project").addEventListener("click", () => loadProject());
+$("#btn-del-project").addEventListener("click", async () => {
+  if (!state.projectId) return toast("请先选择项目", "err");
+  if (!confirm("确认删除该项目及其本地数据？")) return;
+  try {
+    await api(`/api/projects/${state.projectId}`, { method: "DELETE" });
+    state.projectId = "";
+    localStorage.removeItem("qts_project_id");
+    await loadProjectList();
+    toast("项目已删除", "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
 
 async function loadProject() {
   if (!state.projectId) return toast("未选项目", "err");
@@ -114,8 +128,11 @@ async function loadProject() {
     state.tree = r.project.tree || [];
     state.marked = r.project.marked_elements || [];
     state.shots = r.project.shots || [];
+    state.projectCases = r.project.cases || [];
+    window._lastCases = state.projectCases;
     renderTree();
     renderMarked();
+    renderPreview({ cases: state.projectCases });
     await loadShotList();
     toast(`已加载 ${r.project.name}（恢复登录:${r.restored_login ? "是" : "否"}）`, "ok");
   } catch (e) {
@@ -791,6 +808,14 @@ function pathNames(id) {
   return chain.join(" / ");
 }
 
+function caseCountForNode(id) {
+  const list = window._lastCases || state.projectCases || [];
+  if (!list.length) return 0;
+  // 该节点及其子树命中的用例
+  const ids = descendantsOf(id);
+  return list.filter((c) => ids.has(c.point_id)).length;
+}
+
 function renderTree() {
   const byParent = {};
   for (const n of state.tree) {
@@ -810,11 +835,13 @@ function renderTree() {
     const kids = byParent[n.id] || [];
     const st = n.status || "pending";
     const stCls = st === "pass" ? "st-pass" : st === "fail" ? "st-fail" : "";
+    const cnt = caseCountForNode(n.id);
     return `
       <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}">
         <input type="checkbox" class="tree-check" data-id="${n.id}" title="多选以便批量删除" />
         <span class="badge-sm ${n.node_type}">${typeLabel[n.node_type] || n.node_type}</span>
         <span class="nm">${esc(n.name)}</span>
+        ${cnt ? `<span class="case-cnt" title="测试用例数">${cnt}</span>` : ""}
         <span class="${stCls}">${st === "pass" ? "✓" : st === "fail" ? "✗" : ""}</span>
       </div>
       ${kids.length ? `<div class="tree-children">${kids.map(nodeHtml).join("")}</div>` : ""}`;
@@ -825,10 +852,15 @@ function renderTree() {
     rootNodes.map(nodeHtml).join("") ||
     `<div class="muted" style="padding:12px">空树。「自动建树」或右键镜像添加。</div>`;
 
+  const total = (window._lastCases || state.projectCases || []).length;
+  const el = $("#tree-case-total");
+  if (el) el.textContent = total + " 用例";
+
   $("#tree").querySelectorAll(".tree-node").forEach((el) => {
     el.addEventListener("click", (ev) => {
       if (ev.target.classList && ev.target.classList.contains("tree-check")) return;
       selectNode(el.dataset.id);
+      showCasesForNode(el.dataset.id);
     });
     el.addEventListener("dblclick", () => openNodeEditor(el.dataset.id));
     el.addEventListener("contextmenu", (ev) => {
@@ -840,7 +872,6 @@ function renderTree() {
     cb.addEventListener("click", (ev) => ev.stopPropagation());
     cb.addEventListener("change", (ev) => {
       ev.stopPropagation();
-      // 级联：勾选/取消子节点
       const id = cb.dataset.id;
       const ids = descendantsOf(id);
       $$("#tree .tree-check").forEach((x) => {
@@ -848,6 +879,33 @@ function renderTree() {
       });
     });
   });
+}
+
+function showCasesForNode(nodeId) {
+  const ids = descendantsOf(nodeId);
+  const all = window._lastCases || state.projectCases || [];
+  const list = all.filter((c) => ids.has(c.point_id));
+  if (!list.length) {
+    // 自动对单节点预览生成
+    api("/api/browser/tree/preview-cases", {
+      method: "POST",
+      body: {
+        include_negative: true,
+        include_auth_cases: true,
+        point_ids: [nodeId],
+      },
+    })
+      .then((r) => {
+        window._lastCases = r.cases || [];
+        renderPreview({ cases: window._lastCases });
+      })
+      .catch(() => {
+        $("#case-preview").innerHTML =
+          '<div class="muted">该节点暂无用例。可点「预览/生成入库」</div>';
+      });
+    return;
+  }
+  renderPreview({ cases: list });
 }
 
 $("#btn-del-tree-selected").addEventListener("click", async () => {
@@ -1212,31 +1270,37 @@ $("#node-annotation").addEventListener("change", async () => {
 /* ================= 截图库 ================= */
 async function loadShotList() {
   try {
-    // 优先项目内 shots
+    // 合并：项目已入库 + 当前会话临时截图
     let shots = [];
     if (state.projectId) {
       const p = await api(`/api/projects/${state.projectId}`);
-      shots = p.project.shots || [];
-      $("#shot-dir").textContent = `存储目录：${p.project.shots_dir || ""}`;
+      shots = (p.project.shots || []).map((s) => ({ ...s, committed: true }));
+      const dir = p.project.shots_dir || "";
+      $("#shot-dir").textContent = `截图库：${dir} · 自动截图默认开，未入库仅临时缓存`;
     } else {
-      const r = await api("/api/browser/shots");
-      shots = r.shots || [];
-      $("#shot-dir").textContent = "存储目录：data/output/shots";
+      $("#shot-dir").textContent = "截图库：data/output/shots · 自动截图默认开";
+    }
+    try {
+      const live = await api("/api/browser/shots");
+      const tmp = (live.shots || []).filter((s) => !s.committed);
+      shots = shots.concat(tmp);
+    } catch {
+      /* ignore */
     }
     state.shots = shots;
     $("#shot-list").innerHTML =
       shots
-        .slice(-30)
+        .slice(-40)
         .reverse()
         .map(
           (s) => `
       <div class="shot-item" data-id="${s.id}">
         <img src="/api/browser/shot-file/${encodeURIComponent(s.file || s.id + ".png")}" alt="" />
-        <div class="p">${esc(s.tag || "")} · ${new Date((s.time || 0) * 1000).toLocaleString()}<br/>${esc(s.path || s.file || "")}</div>
-        <button class="mini danger" data-act="del-shot" data-id="${s.id}" title="删除截图">删</button>
+        <div class="p">${s.committed ? "" : "[临时] "}${esc(s.tag || "")} · ${new Date((s.time || 0) * 1000).toLocaleString()}<br/>${esc(s.path || s.file || "")}</div>
+        <button class="mini danger" data-act="del-shot" data-id="${s.id}" title="删除">删</button>
       </div>`
         )
-        .join("") || `<div class="muted">暂无截图（默认关闭自动截图）</div>`;
+        .join("") || `<div class="muted">暂无截图（自动截图已开时操作页面会自动缓存，入库后持久化）</div>`;
 
     $("#shot-list").querySelectorAll(".shot-item").forEach((el) => {
       el.addEventListener("click", (ev) => {
@@ -1419,7 +1483,16 @@ $("#btn-build-cases").addEventListener("click", async () => {
       body: { extra: { include_negative: true, include_auth_cases: true }, sys_name: "" },
     });
     state.sessionId = r.session_id;
+    window._lastCases = r.cases || [];
+    state.projectCases = r.cases || [];
     renderPreview({ cases: r.cases });
+    renderTree();
+    if (state.projectId) {
+      api(`/api/projects/${state.projectId}`, {
+        method: "PUT",
+        body: { cases: state.projectCases },
+      }).catch(() => {});
+    }
     toast(`已生成 ${r.count} 条`, "ok");
   } catch (e) {
     toast(e.message, "err");
