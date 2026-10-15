@@ -858,3 +858,6 @@
   font-size: 11px;
   flex-shrink: 0;
 }
+
+.tree-case .nm { color: #475569; font-size: 12px; }
+.tree-children > .tree-case { padding-left: 10px; }

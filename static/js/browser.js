@@ -862,8 +862,11 @@ function renderTree() {
         ${cnt ? `<span class="case-cnt" title="测试用例数">${cnt}</span>` : ""}
         <span class="${stCls}">${st === "pass" ? "✓" : st === "fail" ? "✗" : ""}</span>
       </div>
-      ${caseHtml}
-      ${kids.length ? `<div class="tree-children">${kids.map(nodeHtml).join("")}</div>` : ""}`;
+      ${
+        caseHtml || kids.length
+          ? `<div class="tree-children">${caseHtml}${kids.map(nodeHtml).join("")}</div>`
+          : ""
+      }`;
   }
 
   const rootNodes = state.tree.filter((n) => !n.parent_id);
@@ -1533,13 +1536,18 @@ $("#btn-preview").addEventListener("click", async () => {
 });
 
 $("#btn-build-cases").addEventListener("click", async () => {
+  const has = (state.committedCases || []).length > 0;
+  if (has && !confirm("已存在入库用例，重新生成将覆盖，是否继续？")) return;
   try {
     const r = await api("/api/browser/cases/from-tree", {
       method: "POST",
-      body: { extra: { include_negative: true, include_auth_cases: true }, sys_name: "" },
+      body: {
+        extra: { include_negative: true, include_auth_cases: true },
+        sys_name: "",
+        replace: true,
+      },
     });
     state.sessionId = r.session_id;
-    // 入库：进 committedCases，挂在树上；生成台清空
     state.committedCases = r.cases || [];
     state.projectCases = state.committedCases;
     window._lastCases = [];
@@ -1555,27 +1563,13 @@ $("#btn-build-cases").addEventListener("click", async () => {
     }
     renderTree();
     $("#case-preview").innerHTML =
-      `<div class="muted">已入库 ${state.committedCases.length} 条，显示在功能点树下。点击树节点/用例查看。</div>`;
+      `<div class="muted">已入库 ${state.committedCases.length} 条（覆盖旧数据），挂在功能点树下。</div>`;
     toast(`已入库 ${r.count} 条`, "ok");
   } catch (e) {
     toast(e.message, "err");
   }
 });
 
-$("#btn-export").addEventListener("click", async () => {
-  if (!state.sessionId) return toast("请先生成入库", "err");
-  try {
-    const r = await api("/api/export", {
-      method: "POST",
-      body: { session_id: state.sessionId, format: "xlsx" },
-    });
-    const name = r.path.split(/[\\/]/).pop();
-    window.open(`/api/export/download/${encodeURIComponent(name)}`, "_blank");
-    toast("已导出 " + name, "ok");
-  } catch (e) {
-    toast(e.message, "err");
-  }
-});
 $("#btn-go-cases").addEventListener("click", () => $("#btn-build-cases").click());
 
 $("#btn-clear-cases") &&
