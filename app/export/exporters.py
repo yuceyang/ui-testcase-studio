@@ -140,17 +140,17 @@ def _to_xlsx(cases: list[TestCase], path: Path) -> None:
                 cell.value = c.screenshot_path or "-"
                 continue
             try:
+                from io import BytesIO
+
                 from PIL import Image as PILImage
 
-                with PILImage.open(str(path)) as _pi:
-                    _pi.verify()
+                buf = BytesIO()
+                with PILImage.open(str(Path(path).resolve())) as _pi:
+                    _pi.convert("RGB").save(buf, format="PNG")
+                buf.seek(0)
+                img = XLImage(buf)
             except Exception:
                 cell.value = c.screenshot_path or "-"
-                continue
-            try:
-                img = XLImage(str(path))
-            except Exception:
-                cell.value = c.screenshot_path
                 continue
             try:
                 w0 = float(img.width or 240)
