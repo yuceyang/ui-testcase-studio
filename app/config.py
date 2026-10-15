@@ -18,7 +18,7 @@ SESSION_DIR = DATA_DIR / "sessions"
 
 class AISettings(BaseModel):
     provider: str = "openai"
-    base_url: str = "https://api.openai.com/v1"
+    base_url: str = ""
     api_key: str = ""
     model: str = "gpt-4o"
     vision_model: str = "gpt-4o"

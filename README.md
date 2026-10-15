@@ -1,46 +1,62 @@
-﻿# UI Testcase Studio
+# UI Testcase Studio
 
-Interactive **read-only** functional test-case workbench: open a live embedded browser, navigate and **log in manually**, harvest UI controls (buttons / inputs / selects, including iframes), organize them as a module tree, then generate query-only test cases and export to Excel / Markdown / CSV.
+Interactive **read-only** functional test-case workbench for web systems.
 
-> 浠呯敤浜?*鎺堟潈娴嬭瘯鐜**鐨勬煡璇?灞曠ず绫诲姛鑳介獙璇併€傞粯璁ょ害鏉燂細涓嶈璁°€佷笉鎵ц澧炲垹鏀瑰啓鎿嶄綔銆?
+Open a live embedded browser, log in manually, harvest UI controls (buttons, inputs, including iframes), organize them as a module tree, generate query-only test cases aligned with **《功能测试提示词 v3.0》**, and export to Excel / CSV / HTML / JSON / Markdown.
+
+> Use only on systems you are authorized to test. The tool is designed for **query/read-only** verification and does not execute create/update/delete operations.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-## Screenshots
-
-![live view](docs/images/live-view.png)
-
-> Place UI screenshots under docs/images/.
 
 ## Features
 
-- **Live browser view** 鈥?address bar, click, type (manual login, no cookie paste required)
-- **Element discovery** 鈥?buttons, inputs, selects, links; recursive iframe walk
-- **Module tree** 鈥?`Module 鈫?Title1 鈫?Title2 鈫?Title3 鈫?Point 鈫?XX test/verify`
-- **Human review** 鈥?mark points, annotate issues, pass / fail / ignore
-- **Case generation** 鈥?query-only cases (optional LLM / multimodal assist)
-- **Export** 鈥?`.xlsx` / `.md` / `.csv`
+| Area | What you get |
+|------|----------------|
+| Live browser | Address bar, click, type (Chinese IME), paste, zoom (Ctrl+wheel), pop-out window |
+| Auth | Manual login in the mirror (no cookie paste required); optional project `storageState` restore |
+| Elements | Buttons / inputs / selects / links; recursive iframe walk; right-click mark / cancel |
+| Tree | `Module → L1/L2/L3 → Point → Cases`; collapse; batch move/delete; case counts |
+| Cases | Query-only templates (positive / query / negative / auth); editable detail; auto-save projects |
+| Screenshots | Auto (default on) temp cache → persist into project on import; embed images in Excel |
+| Export | Excel (19+ columns per v3 + request fields + screenshot column), CSV, HTML, JSON, Markdown |
+| AI | Optional LLM / multimodal (vision) assist; demo fallback without API key |
 
 ## Requirements
 
 - Windows / macOS / Linux
 - Python 3.10+
-- Microsoft Edge or Google Chrome (Playwright `channel=msedge` / `chrome`; no separate Chromium download required)
+- Microsoft Edge or Google Chrome (Playwright `channel=msedge` / `chrome`)
+- Optional: Pillow (Excel image embed)
 
 ## Install
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate
+# Windows: .venv\Scripts\activate
+
 pip install -r requirements.txt
 ```
 
-## Configure (optional LLM)
+## Configure
 
 ```bash
 cp config.example.yaml config.yaml
-# edit ai.base_url / ai.model / ai.vision_model
-# or: export QTS_API_KEY=sk-...
 ```
+
+Put model settings in `config.yaml` if needed. **Do not commit API keys.**
+
+```bash
+export QTS_API_KEY=sk-...
+# or: export OPENAI_API_KEY=sk-...
+```
+
+| Key | Meaning |
+|-----|---------|
+| `ai.provider` | `openai` \| `anthropic` \| `custom` |
+| `ai.base_url` | Compatible gateway base URL (optional) |
+| `ai.model` / `ai.vision_model` | Text / multimodal model names |
+| `QTS_API_KEY` | API key via environment (preferred) |
 
 ## Run
 
@@ -49,51 +65,59 @@ python run.py
 # open http://127.0.0.1:8787
 ```
 
-Typical flow in the UI:
+Typical workflow:
 
-1. Click **鍚姩娴忚鍣?*
-2. Type the target URL in the address bar 鈫?**鍓嶅線**
-3. Click the live view to focus login fields, type account/password in the top input bar, press **Enter**
-4. **鑷姩鍙戠幇鍏冪礌** 鈫?**鑷姩寤哄姛鑳界偣鏍?* (or add nodes manually)
-5. Mark functional points, annotate pass/fail
-6. **鐢熸垚娴嬭瘯鐢ㄤ緥** 鈫?**瀵煎嚭Excel**
+1. **New project** (per system under test)
+2. Type target URL in the browser chrome → **前往** (auto-starts the built-in browser)
+3. Click the live view, type username/password (IME supported), log in
+4. **发现元素** → **自动建树** (or add Module / Dir / Point manually)
+5. Mark controls (batch *标记为…*), adjust tree, pass/fail on case detail
+6. **生成入库** → cases appear under tree nodes
+7. **批量导出** → Excel / CSV / HTML / JSON / Markdown
 
 ## Project layout
 
 ```
-鈹溾攢鈹€ LICENSE                 # MIT
-鈹溾攢鈹€ README.md
-鈹溾攢鈹€ requirements.txt
-鈹溾攢鈹€ config.example.yaml
-鈹溾攢鈹€ run.py                  # entry: python run.py
-鈹溾攢鈹€ app/
-鈹?  鈹溾攢鈹€ main.py             # FastAPI
-鈹?  鈹溾攢鈹€ browser/            # Playwright live view + element extract
-鈹?  鈹溾攢鈹€ discovery/          # optional HTTP discovery
-鈹?  鈹溾攢鈹€ ai/                 # optional LLM case generation
-鈹?  鈹斺攢鈹€ export/             # xlsx / md / csv
-鈹溾攢鈹€ static/                 # web UI
-鈹斺攢鈹€ docs/compose/spec/      # design notes
+├── LICENSE
+├── README.md
+├── requirements.txt
+├── config.example.yaml     # copy to config.yaml (gitignored)
+├── run.py
+├── app/
+│   ├── main.py             # FastAPI
+│   ├── browser/            # Playwright live view + elements + case builder
+│   ├── discovery/          # optional HTTP discovery
+│   ├── ai/                 # optional LLM case generation
+│   ├── export/             # xlsx / csv / html / json / md
+│   └── projects.py         # per-project persistence
+├── static/                 # web UI
+└── docs/
 ```
+
+## Case export format
+
+Excel columns follow **功能测试提示词 v3.0** (case no, system, module, L1/L2, design, trace, stop condition, title, preconditions, steps, expected, exec fields, remark) plus:
+
+- Request method, URL, params
+- Execution status
+- Screenshot path
+- **Screenshot image** (embedded thumbnail when Pillow is installed)
 
 ## Security & ethics
 
-- Use only on systems you are authorized to test.
-- The tool does **not** execute create/update/delete operations by design.
-- Do not commit `config.yaml` or session cookies/tokens; they are gitignored.
+- Authorized testing only
+- No create/update/delete workflows in case design
+- Secrets stay in env vars / local `config.yaml` (gitignored)
+- Project login state is stored under `data/projects/` locally only
+
+## 中文说明
+
+面向 Web 系统的**只读查询类**功能测试辅助：内置浏览器手动登录，采集按钮/输入框等控件，按「模块-一/二/三级-功能点」建树，生成可编辑用例并导出。
+
+- 默认开启自动截图（入库后写入项目截图库）
+- 操作自动保存项目
+- 无 API Key 时可用演示用例跑通流程
 
 ## License
 
 [MIT](LICENSE)
-
-## Chinese quick start / 涓枃閫熻
-
-| 姝ラ | 鎿嶄綔 |
-|------|------|
-| 鍚姩 | `python run.py` 鍚庢墦寮€ `http://127.0.0.1:8787` |
-| 鐧诲綍 | 鍦板潃鏍忚緭鍏ョ綉鍧€锛屽湪椤甸潰瑙嗗浘閲岀偣閫夎緭鍏ユ骞舵墜鍔ㄧ櫥褰曪紙鏃犻渶绮樿创 Cookie锛?|
-| 鍙戠幇 | 銆岃嚜鍔ㄥ彂鐜板厓绱犮€嶆姄鎸夐挳/杈撳叆妗嗭紙鍚?iframe锛?|
-| 鏍?| 銆岃嚜鍔ㄥ缓鍔熻兘鐐规爲銆嶆垨鎵嬪姩锛氭ā鍧?鈫?涓€/浜?涓夌骇鏍囬 鈫?鍔熻兘鐐?|
-| 鍒ゅ畾 | 鏍囨敞闂鍚庣偣閫氳繃 / 涓嶉€氳繃 |
-| 鐢ㄤ緥 | 鐢熸垚娴嬭瘯鐢ㄤ緥 鈫?瀵煎嚭 Excel锛屽懡鍚嶃€屾ā鍧?鏍囬-鍔熻兘鐐?XX鍔熻兘鐐规祴璇?楠岃瘉銆?|
-

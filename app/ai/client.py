@@ -40,7 +40,8 @@ class LLMClient:
     # ---------- OpenAI 兼容 ----------
     def _chat_openai(self, messages: list[dict[str, Any]], vision: bool = False) -> str:
         model = self.s.vision_model if vision else self.s.model
-        url = self.s.base_url.rstrip("/") + "/chat/completions"
+        base = (self.s.base_url or "").strip() or "https://api.openai.com/v1"
+        url = base.rstrip("/") + "/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.s.api_key}",
             "Content-Type": "application/json",
@@ -68,7 +69,8 @@ class LLMClient:
     # ---------- Anthropic ----------
     def _chat_anthropic(self, messages: list[dict[str, Any]], vision: bool = False) -> str:
         model = self.s.vision_model if vision else self.s.model
-        url = self.s.base_url.rstrip("/") + "/v1/messages"
+        base = (self.s.base_url or "").strip() or "https://api.anthropic.com"
+        url = base.rstrip("/") + "/v1/messages"
         headers = {
             "x-api-key": self.s.api_key,
             "anthropic-version": "2023-06-01",
