@@ -140,6 +140,14 @@ def _to_xlsx(cases: list[TestCase], path: Path) -> None:
                 cell.value = c.screenshot_path or "-"
                 continue
             try:
+                from PIL import Image as PILImage
+
+                with PILImage.open(str(path)) as _pi:
+                    _pi.verify()
+            except Exception:
+                cell.value = c.screenshot_path or "-"
+                continue
+            try:
                 img = XLImage(str(path))
             except Exception:
                 cell.value = c.screenshot_path
