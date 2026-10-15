@@ -21,6 +21,16 @@ from .models import ExtraRequirement, TestCase
 router = APIRouter(prefix="/api/browser", tags=["browser"])
 
 
+def _default_sys_name() -> str:
+    try:
+        from .projects import store as project_store
+
+        lst = project_store.list_projects()
+        return (lst[0]["name"] if lst else "") or "被测系统"
+    except Exception:
+        return "被测系统"
+
+
 def _ok(**kw):
     return {"ok": True, **kw}
 
@@ -289,13 +299,20 @@ def preview_cases(payload: dict | None = None):
     tree = eng.get_tree()
     if not tree:
         raise HTTPException(400, "功能点树为空")
-    e = ExtraRequirement(**(payload or {}))
-    cases = build_cases_from_tree(tree, eng.list_marked(), e)
+    payload = payload or {}
+    e = ExtraRequirement(**payload)
+    sys_name = payload.get("sys_name") or _default_sys_name()
+    cases = build_cases_from_tree(tree, eng.list_marked(), e, sys_name=sys_name)
     return {
         "ok": True,
         "count": len(cases),
         "titles": [
-            {"title": c.title, "module": c.module, "priority": c.priority, "status": "—"}
+            {
+                "title": c.case_no + " " + c.title,
+                "module": f"{c.module_cat}/{c.title_l1}/{c.title_l2}",
+                "priority": c.priority,
+                "status": "—",
+            }
             for c in cases[:50]
         ],
         "cases": [c.model_dump() for c in cases],
@@ -402,7 +419,8 @@ def cases_from_tree(payload: dict):
         raise HTTPException(400, "功能点树为空")
     extra = ExtraRequirement(**(payload.get("extra") or {}))
     sid = payload.get("session_id") or ("ui_" + datetime.now().strftime("%H%M%S"))
-    cases = build_cases_from_tree(tree, eng.list_marked(), extra)
+    sys_name = payload.get("sys_name") or _default_sys_name()
+    cases = build_cases_from_tree(tree, eng.list_marked(), extra, sys_name=sys_name)
 
     if not store.get(sid):
         store.create(sid, base_url=eng.current().get("url", ""))

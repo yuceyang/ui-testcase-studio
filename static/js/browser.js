@@ -847,7 +847,15 @@ function renderTree() {
   });
   $("#tree").querySelectorAll(".tree-check").forEach((cb) => {
     cb.addEventListener("click", (ev) => ev.stopPropagation());
-    cb.addEventListener("change", (ev) => ev.stopPropagation());
+    cb.addEventListener("change", (ev) => {
+      ev.stopPropagation();
+      // 级联：勾选/取消子节点
+      const id = cb.dataset.id;
+      const ids = descendantsOf(id);
+      $$("#tree .tree-check").forEach((x) => {
+        if (ids.has(x.dataset.id)) x.checked = cb.checked;
+      });
+    });
   });
 }
 
@@ -865,6 +873,42 @@ $("#btn-del-tree-selected").addEventListener("click", async () => {
   if (ids.includes(state.selectedNodeId)) state.selectedNodeId = null;
   await loadTree();
   toast(`已删除 ${ids.length} 个节点`, "ok");
+});
+
+/* 批量移动 */
+$("#btn-move-tree-selected").addEventListener("click", () => {
+  const ids = $$("#tree .tree-check:checked").map((x) => x.dataset.id);
+  if (!ids.length) return toast("请勾选要移动的节点", "err");
+  // 合并所有选中及其子节点
+  const all = new Set(ids);
+  ids.forEach((id) => descendantsOf(id).forEach((x) => all.add(x)));
+  $("#move-hint").textContent = `将移动 ${all.size} 个节点（含子节点）`;
+  $("#modal-move").dataset.ids = JSON.stringify([...all]);
+  fillParentOptions($("#mv-parent"), null, state.selectedNodeId || "");
+  // 移动目标不能是自己的子孙
+  $("#modal-move").classList.remove("hidden");
+});
+$("#btn-close-move").addEventListener("click", () => $("#modal-move").classList.add("hidden"));
+$("#btn-save-move").addEventListener("click", async () => {
+  const ids = JSON.parse($("#modal-move").dataset.ids || "[]");
+  const parent = $("#mv-parent").value || null;
+  if (parent && ids.includes(parent)) return toast("不能移动到自身或子节点下", "err");
+  const idSet = new Set(ids);
+  // 只改「选中集合中的根节点」的父级，子节点随树自然跟走
+  const roots = state.tree.filter((n) => idSet.has(n.id) && !idSet.has(n.parent_id));
+  try {
+    for (const n of roots) {
+      await api(`/api/browser/tree/node/${n.id}`, {
+        method: "PUT",
+        body: { parent_id: parent },
+      });
+    }
+    await loadTree();
+    $("#modal-move").classList.add("hidden");
+    toast(`已移动 ${roots.length} 个节点`, "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
 });
 
 async function loadTree() {
@@ -1328,6 +1372,7 @@ function initSplitters() {
   if (saved.sideFlex) root.style.setProperty("--side-flex", saved.sideFlex);
   if (saved.browserFlex) root.style.setProperty("--browser-flex", saved.browserFlex);
   if (saved.elemFlex) root.style.setProperty("--elem-flex", saved.elemFlex);
+  if (saved.casesFlex) root.style.setProperty("--cases-flex", saved.casesFlex);
 
   const persist = () => {
     const cs = getComputedStyle(root);
@@ -1339,6 +1384,7 @@ function initSplitters() {
         sideFlex: parseFloat(cs.getPropertyValue("--side-flex")) || 48,
         browserFlex: parseFloat(cs.getPropertyValue("--browser-flex")) || 62,
         elemFlex: parseFloat(cs.getPropertyValue("--elem-flex")) || 38,
+        casesFlex: parseFloat(cs.getPropertyValue("--cases-flex")) || 30,
       })
     );
   };
@@ -1379,7 +1425,13 @@ function initSplitters() {
           const dy = e.clientY - startY;
           const t = Math.min(Math.max(browserFlex + (dy / h) * 100, 35), 85);
           root.style.setProperty("--browser-flex", t);
-          root.style.setProperty("--elem-flex", 100 - t);
+          root.style.setProperty("--elem-flex", 100 - t - (parseFloat(cs.getPropertyValue("--cases-flex")) || 30));
+        } else if (kind === "cases-v") {
+          const h = rightEl.clientHeight || 1;
+          const dy = e.clientY - startY;
+          const c0 = parseFloat(cs.getPropertyValue("--cases-flex")) || 30;
+          const c = Math.min(Math.max(c0 + (-dy / h) * 100, 15), 55);
+          root.style.setProperty("--cases-flex", c);
         }
         drawGhost();
       };

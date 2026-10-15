@@ -191,14 +191,26 @@
   padding: 8px 10px 16px;
 }
 .right-stack .browser-col {
-  flex: var(--browser-flex, 62) 1 0%;
-  min-height: 240px;
+  flex: var(--browser-flex, 50) 1 0%;
+  min-height: 200px;
 }
 .right-stack .elements-panel {
-  flex: var(--elem-flex, 38) 1 0%;
+  flex: var(--elem-flex, 35) 1 0%;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+.right-stack .cases-panel {
+  flex: var(--cases-flex, 28) 1 0%;
   min-height: 140px;
   display: flex;
   flex-direction: column;
+}
+.right-stack .case-preview {
+  flex: 1;
+  min-height: 80px;
+  overflow: auto;
+  padding: 8px 10px;
 }
 .right-stack .el-table-wrap {
   flex: 1;

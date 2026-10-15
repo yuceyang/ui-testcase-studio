@@ -79,6 +79,16 @@ class TestCase(BaseModel):
     ai_rationale: str = ""
     human_modified: bool = False
     approved: bool = True
+    # 功能测试提示词 v3.0 列
+    case_no: str = ""
+    sys_name: str = ""
+    module_cat: str = ""
+    title_l1: str = "/"
+    title_l2: str = "/"
+    design_req: str = ""
+    test_track: str = ""
+    stop_cond: str = "功能验证完成或出现阻断缺陷即终止"
+    remark: str = "-"
 
 
 class GenerateResult(BaseModel):
