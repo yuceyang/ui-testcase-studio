@@ -1987,6 +1987,15 @@ function toggleCollapse(id) {
   const body = document.getElementById(id);
   if (!body) return;
   const on = body.classList.toggle("collapsed");
+  const panel = body.closest(".col");
+  if (panel) {
+    panel.classList.toggle("is-collapsed", on);
+    const sp = panel.previousElementSibling;
+    if (sp && sp.classList && sp.classList.contains("splitter")) {
+      sp.classList.toggle("hidden-split", on);
+    }
+  }
+  window.dispatchEvent(new Event("resize"));
   $$(`[data-collapse="${id}"]`).forEach((b) => {
     if (b.classList.contains("collapse-toggle")) b.textContent = on ? "展开" : "折叠";
   });

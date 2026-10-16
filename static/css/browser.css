@@ -1365,3 +1365,28 @@
 }
 .collapse-toggle { pointer-events: auto; }
 .col-head.collapsible { cursor: default; }
+
+/* 折叠手风琴：只留标题栏，空间让给浏览器 */
+#elements-panel.is-collapsed,
+#cases-panel.is-collapsed,
+#side-panel.is-collapsed {
+  flex: 0 0 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+#elements-panel.is-collapsed .el-table-wrap,
+#elements-panel.is-collapsed #el-body,
+#cases-panel.is-collapsed .case-preview,
+#cases-panel.is-collapsed #cases-body,
+#side-panel.is-collapsed .collapse-body,
+#side-panel.is-collapsed .hint-line {
+  display: none !important;
+}
+#browser-col {
+  flex: 1 1 auto !important;
+  min-height: 280px !important;
+}
+.right-stack .browser-col { flex: 1 1 auto !important; }
+.splitter.h.hidden-split { display: none !important; }
