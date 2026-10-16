@@ -277,6 +277,27 @@ class BrowserEngine:
         return self._call(_inner)
 
     # ---------- 实时镜像 ----------
+    def live_page_height(self) -> int:
+        def _inner() -> int:
+            page = self._require_page()
+            try:
+                h = page.evaluate(
+                    "() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, innerHeight)"
+                )
+                return int(h or 900)
+            except Exception:
+                return 900
+
+        return self._call(_inner)
+
+    def live_frame_full(self) -> bytes:
+        """整页截图，用于自适应高度展示。"""
+        def _inner() -> bytes:
+            page = self._require_page()
+            return page.screenshot(type="jpeg", quality=70, full_page=True)
+
+        return self._call(_inner, timeout=60)
+
     def live_frame(self) -> bytes:
         """返回当前页 JPEG 帧（视口截图），供前端镜像展示。"""
 

@@ -1725,3 +1725,26 @@ html, body {
   min-height: 0 !important;
   max-height: none !important;
 }
+
+/* 整页镜像自适应高度：内滚交给全局 */
+#browser-col {
+  height: auto !important;
+  min-height: 600px !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.live-wrap {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.live-stage {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+#live-frame img {
+  width: 100% !important;
+  height: auto !important;
+  max-height: none !important;
+}

@@ -118,6 +118,19 @@ def go_back():
 
 
 # ---------- 实时镜像 ----------
+@router.get("/live/frame-full")
+def live_frame_full():
+    from fastapi.responses import Response
+
+    data = _run(lambda eng: eng.live_frame_full())
+    return Response(content=data, media_type="image/jpeg")
+
+
+@router.get("/live/page-height")
+def live_page_height():
+    return _run(lambda eng: {"height": eng.live_page_height()})
+
+
 @router.get("/live/frame")
 def live_frame():
     from fastapi.responses import Response

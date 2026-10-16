@@ -224,7 +224,7 @@ function stopLive() {
 
 async function refreshLiveFrame() {
   try {
-    const res = await fetch("/api/browser/live/frame", { cache: "no-store" });
+    const res = await fetch("/api/browser/live/frame-full", { cache: "no-store" });
     if (!res.ok) return;
     const blob = await res.blob();
     if (blob.size < 100) return;
