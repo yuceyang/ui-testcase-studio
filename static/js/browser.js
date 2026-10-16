@@ -2141,12 +2141,13 @@ function initSplitters() {
         const stackH = $("#left-stack").getBoundingClientRect().height;
         const h0 = tEl.getBoundingClientRect().height;
         const move = (e) => {
-          const minSide = 160;
-          const h = Math.min(Math.max(120, h0 + (e.clientY - startY)), stackH - minSide);
+          // 允许超出视口：整页出滚动条，不设 max
+          const h = Math.max(120, h0 + (e.clientY - startY));
           tEl.style.flex = "none";
           tEl.style.height = h + "px";
           sEl.style.flex = "0 0 auto";
-          sEl.style.height = Math.max(minSide, stackH - h) + "px";
+          sEl.style.height = "auto";
+          sEl.style.minHeight = "160px";
         };
         const up = () => {
           sp.classList.remove("active");
@@ -2190,12 +2191,14 @@ function initSplitters() {
           if (kind === "right-v") {
             brow.style.flex = "none";
             brow.style.height = Math.max(160, hb + dy) + "px";
-            elp.style.flex = "1 1 auto";
+            elp.style.flex = "0 0 auto";
             elp.style.height = "auto";
+            cap.style.flex = "0 0 auto";
+            cap.style.height = "auto";
           } else {
             cap.style.flex = "none";
-            cap.style.height = Math.max(100, hc - dy) + "px";
-            elp.style.flex = "1 1 auto";
+            cap.style.height = Math.max(120, hc - dy) + "px";
+            elp.style.flex = "0 0 auto";
             elp.style.height = "auto";
           }
         };

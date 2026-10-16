@@ -1390,3 +1390,40 @@
 }
 .right-stack .browser-col { flex: 1 1 auto !important; }
 .splitter.h.hidden-split { display: none !important; }
+
+/* 页面可被拖高，全局滚动条接管 */
+html, body {
+  height: auto !important;
+  min-height: 100vh !important;
+  overflow: visible !important;
+}
+.workspace, .layout-2 {
+  height: auto !important;
+  min-height: calc(100vh - 96px) !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.left-stack {
+  max-height: none !important;
+  overflow: visible !important;
+  height: auto !important;
+}
+#side-panel {
+  max-height: none !important;
+  min-height: 160px !important;
+  overflow: hidden !important;
+}
+#tree-panel {
+  max-height: none !important;
+  min-height: 120px !important;
+}
+#cases-panel, #elements-panel {
+  max-height: none !important;
+}
+#browser-col {
+  min-height: 240px !important;
+}
+/* 拖高后内容区内部仍可滚 */
+#tree, #marked-list, .el-table-wrap, #case-preview {
+  overflow-y: auto !important;
+}
