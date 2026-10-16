@@ -1027,8 +1027,6 @@ function renderTree() {
     el.textContent = total + " 用例";
     el.style.display = "none"; // 总数已挪到根节点
   }
-  const el = $("#tree-case-total");
-  if (el) el.textContent = total + " 用例";
 
   $("#tree").querySelectorAll(".tree-node").forEach((el) => {
     el.addEventListener("click", (ev) => {
