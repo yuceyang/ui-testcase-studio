@@ -2309,7 +2309,13 @@ let liveZoom = 1;
 function applyZoom() {
   const img = $("#live-img");
   if (!img) return;
-  img.style.width = 100 * liveZoom + "%";
+  const frame = $("#live-frame");
+  // zoom 不改布局流，配合 overflow 避免黑框
+  if (frame) {
+    frame.style.zoom = String(liveZoom);
+  }
+  img.style.width = "100%";
+  img.style.zoom = String(liveZoom);
   const box = $("#zoom-label");
   if (box) {
     if (document.activeElement !== box) {
@@ -2319,20 +2325,21 @@ function applyZoom() {
   drawGhost();
 }
 function setZoom(z) {
-  liveZoom = Math.min(Math.max(z, 0.5), 3);
+  liveZoom = Math.min(Math.max(z, 0.5), 2);
   applyZoom();
 }
 function initZoom() {
   $("#btn-zoom-in") && $("#btn-zoom-in").addEventListener("click", () => setZoom(liveZoom + 0.01));
   $("#btn-zoom-out") && $("#btn-zoom-out").addEventListener("click", () => setZoom(liveZoom - 0.01));
   $("#btn-zoom-reset") && $("#btn-zoom-reset").addEventListener("click", () => setZoom(1));
+  applyZoom();
   const zbox = $("#zoom-label");
   if (zbox) {
     zbox.addEventListener("change", () => {
       const v = parseFloat(String(zbox.value).replace("%", ""));
-      if (!isNaN(v) && v >= 50 && v <= 300) setZoom(v / 100);
+      if (!isNaN(v) && v >= 50 && v <= 200) setZoom(v / 100);
       else {
-        toast("缩放请输入 50–300");
+        toast("缩放请输入 50–200");
         zbox.value = String(Math.round(liveZoom * 100));
       }
     });
