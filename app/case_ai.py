@@ -92,6 +92,8 @@ def ai_edit(payload: dict[str, Any]):
                 f"现有内容 JSON:\n{json.dumps(src, ensure_ascii=False)}"
             )
             client = LLMClient(settings.ai)
+            # 改写场景短超时，避免卡住弹窗
+            client.s.timeout = min(int(client.s.timeout or 60), 45)
             raw = client.chat(
                 [
                     {"role": "system", "content": sys_p},
