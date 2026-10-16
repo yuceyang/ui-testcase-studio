@@ -834,22 +834,31 @@ async function attachElToNode(nodeId, elId) {
 async function loadMarked() {
   try {
     const r = await api("/api/browser/marked");
-    state.marked = r.elements || [];
-    $("#marked-count").textContent = String(state.marked.length);
+    const all = r.elements || [];
+    state.marked = all;
+    // 与选中节点联动
+    const n = state.tree.find((x) => x.id === state.selectedNodeId);
+    let list = all;
+    if (n && (n.element_ids || []).length) {
+      const ids = new Set(n.element_ids);
+      list = all.filter((e) => ids.has(e.id));
+    } else if (n) {
+      list = [];
+    }
+    $("#marked-count").textContent = String(list.length);
     $("#marked-list").innerHTML =
-      state.marked
+      list
         .map(
           (e) => `
       <div class="marked-item" data-id="${e.id}">
         <div><b>${esc(e.name || e.text || e.kind)}</b> <span class="k">${esc(e.kind)}</span></div>
-        <div class="k">${esc(e.selector)}</div>
+        <div class="k">${esc(e.selector || "")}</div>
         <div class="row">
           <button class="mini" data-act="un" data-id="${e.id}">取消</button>
         </div>
       </div>`
         )
-        .join("") || `<div class="muted">尚未标记。表格「标记为…」可建树节点。</div>`;
-
+        .join("") || `<div class="muted">当前节点无关联标记</div>`;
     $("#marked-list").querySelectorAll("button[data-act=un]").forEach((b) => {
       b.addEventListener("click", () => unmarkElement(b.dataset.id));
     });
@@ -1052,6 +1061,14 @@ function selectedTreeIds() {
   return Array.from(state.checkedIds || []);
 }
 
+/** 生成用例范围：勾选优先，否则当前单击选中的节点 */
+function generateScopeIds() {
+  const checked = selectedTreeIds();
+  if (checked.length) return checked;
+  if (state.selectedNodeId) return [state.selectedNodeId];
+  return [];
+}
+
 $("#btn-del-tree-selected").addEventListener("click", async () => {
   const ids = selectedTreeIds();
   if (!ids.length) return toast("请勾选要删除的节点", "err");
@@ -1160,6 +1177,7 @@ function selectNode(id) {
     r.classList.toggle("strong", ids.has(r.dataset.elId));
     r.classList.toggle("hover", ids.has(r.dataset.elId));
   });
+  loadMarked();
   if (n.screenshot_id) {
     const s = state.shots.find((x) => x.id === n.screenshot_id);
     if (s) showShotDetail(s);
@@ -1750,9 +1768,9 @@ $("#btn-build-cases").addEventListener("click", async () => {
 });
 
 $("#btn-go-cases").addEventListener("click", async () => {
-  // 生成用例：仅预览到「用例生成台（未入库）」，不入库
-  const ids = selectedTreeIds();
-  if (!ids.length) return toast("请先勾选功能点树节点", "err");
+  // 生成用例：只写入「用例生成台（未入库）」，禁止入库/保存
+  const ids = generateScopeIds();
+  if (!ids.length) return toast("请先选中或勾选功能点树节点", "err");
   try {
     const r = await api("/api/browser/tree/preview-cases", {
       method: "POST",
@@ -1763,8 +1781,9 @@ $("#btn-go-cases").addEventListener("click", async () => {
         sys_name: "",
       },
     });
-    renderPreview({ cases: r.cases || [], mode: "preview" });
-    toast(`已生成 ${r.count} 条预览（未入库），确认后点「生成入库」`, "ok");
+    window._lastCases = r.cases || [];
+    renderPreview({ cases: window._lastCases, mode: "preview" });
+    toast(`已生成 ${r.count} 条未入库用例，请确认后点「生成入库」`, "ok");
   } catch (e) {
     toast(e.message, "err");
   }
