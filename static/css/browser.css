@@ -914,3 +914,31 @@
 .tree-empty-title { font-weight: 600; margin-bottom: 8px; }
 .mini.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 .mini.primary:hover { background: var(--accent-hover); }
+
+/* 树节点统一行高（空/有子一致） */
+.tree-node-unified,
+.tree .tree-node {
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  line-height: 24px !important;
+  padding: 0 4px !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.tree .tree-node .nm {
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.tree .tree-children {
+  margin: 0 0 0 8px !important;
+  padding: 0 !important;
+}
+.tree .tree-children > .tree-node { border: 0; }
