@@ -1634,3 +1634,38 @@ html, body {
 #cases-panel { flex: 1 1 0% !important; max-height: 35vh !important; }
 #side-panel { flex: 0 0 auto !important; max-height: 55% !important; min-height: 160px !important; }
 #tree-panel { flex: 1 1 0% !important; min-height: 120px !important; max-height: calc(100% - 160px) !important; }
+
+/* 手风琴：浏览器吃满剩余高度 */
+#browser-col {
+  flex: 1 1 auto !important;
+  min-height: 200px !important;
+  max-height: none !important;
+  overflow: hidden !important;
+}
+#elements-panel {
+  flex: 0 0 auto !important;
+  min-height: 100px !important;
+  max-height: 50vh !important;
+  overflow: hidden !important;
+}
+#cases-panel {
+  flex: 0 0 auto !important;
+  min-height: 80px !important;
+  max-height: 40vh !important;
+  overflow: hidden !important;
+}
+#elements-panel.is-min, #cases-panel.is-min {
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+}
+#elements-panel.is-min #el-body,
+#cases-panel.is-min #cases-body { display: none !important; }
+#el-body, .el-table-wrap, #cases-body, #case-preview {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  padding-top: 0 !important;
+}
+.el-table-wrap { max-height: none !important; }
+.col-head { padding: 6px 10px !important; }
+.status-box, .shot-list, .marked-list { padding: 6px !important; }

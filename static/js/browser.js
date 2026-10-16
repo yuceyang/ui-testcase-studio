@@ -2364,3 +2364,24 @@ loadLiveMeta();
 initSplitters();
 initPopout();
 initZoom();
+
+$("#btn-max-browser") &&
+  $("#btn-max-browser").addEventListener("click", () => {
+    const el = $("#elements-panel");
+    const cap = $("#cases-panel");
+    const brow = $("#browser-col");
+    const minned = el.classList.contains("is-min");
+    if (!minned) {
+      el.classList.add("is-min");
+      cap.classList.add("is-min");
+      brow.style.flex = "1 1 auto";
+      brow.style.minHeight = "calc(100vh - 160px)";
+      toast("浏览器已最大化");
+    } else {
+      el.classList.remove("is-min");
+      cap.classList.remove("is-min");
+      brow.style.minHeight = "200px";
+      toast("已恢复下方面板");
+    }
+    window.dispatchEvent(new Event("resize"));
+  });
