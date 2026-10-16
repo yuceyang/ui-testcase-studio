@@ -118,6 +118,15 @@ Excel columns follow **功能测试提示词 v3.0** (case no, system, module, L1
 - 操作自动保存项目
 - 无 API Key 时可用演示用例跑通流程
 
+## Recent updates
+
+- Preview cases in console only; import merges per selected scope (no full-tree overwrite)
+- Tree: empty-state guide, case counts, collapse, batch move/delete, unbound group
+- Live browser: manual login, IME, zoom input, pop-out, splitters
+- Case detail: screenshots (temp until import), AI edit for selected fields
+- Export: v3 columns + request fields + embedded screenshots (Pillow)
+- Auto-save projects (cases not wiped by empty autosave)
+
 ## License
 
 [MIT](LICENSE)
