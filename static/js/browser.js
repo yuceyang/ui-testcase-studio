@@ -1749,7 +1749,26 @@ $("#btn-build-cases").addEventListener("click", async () => {
   }
 });
 
-$("#btn-go-cases").addEventListener("click", () => $("#btn-build-cases").click());
+$("#btn-go-cases").addEventListener("click", async () => {
+  // 生成用例：仅预览到「用例生成台（未入库）」，不入库
+  const ids = selectedTreeIds();
+  if (!ids.length) return toast("请先勾选功能点树节点", "err");
+  try {
+    const r = await api("/api/browser/tree/preview-cases", {
+      method: "POST",
+      body: {
+        include_negative: true,
+        include_auth_cases: true,
+        point_ids: ids,
+        sys_name: "",
+      },
+    });
+    renderPreview({ cases: r.cases || [], mode: "preview" });
+    toast(`已生成 ${r.count} 条预览（未入库），确认后点「生成入库」`, "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
 
 $("#btn-clear-cases") &&
   $("#btn-clear-cases").addEventListener("click", () => {

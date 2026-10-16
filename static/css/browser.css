@@ -873,3 +873,29 @@
 
 .badge-sm.unbound { background: #fee2e2; color: #b91c1c; }
 .unbound-root { background: #fff7f7; }
+
+/* 浏览器优先：元素/用例限高内滚，不抢镜像空间 */
+.right-stack .browser-col {
+  flex: var(--browser-flex, 70) 1 0% !important;
+  min-height: 320px !important;
+}
+.right-stack .elements-panel {
+  flex: var(--elem-flex, 18) 1 0%;
+  min-height: 120px;
+  max-height: 220px;
+}
+.right-stack .cases-panel {
+  flex: var(--cases-flex, 12) 1 0%;
+  min-height: 120px;
+  max-height: 200px;
+}
+.right-stack .el-table-wrap,
+.right-stack .case-preview {
+  overflow: auto;
+  min-height: 0;
+}
+.tree { line-height: 1.2; padding: 2px 6px; }
+.tree-node { padding: 1px 4px; margin: 0; min-height: 22px; }
+.tree-children { margin-left: 8px; padding-left: 4px; }
+.tree-children:empty { display: none; }
+.twist { width: 10px; line-height: 1; }
