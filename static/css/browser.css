@@ -1197,3 +1197,62 @@
 #live-stage {
   min-height: 200px !important;
 }
+
+/* 左栏上下独立滚动（分栏拖动后仍有效） */
+.left-stack {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  height: 100% !important;
+}
+#tree-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 120px !important;
+  overflow: hidden !important;
+}
+#tree-panel > .col-head,
+#tree-panel > .hint-line {
+  flex: 0 0 auto !important;
+}
+#tree-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+#tree {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+}
+#side-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 100px !important;
+  overflow: hidden !important;
+}
+#side-panel > .col-head {
+  flex: 0 0 auto !important;
+}
+#marked-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+#marked-list {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+}
+#judge-body, #mark-body, #shot-body {
+  flex: 0 0 auto !important;
+  overflow: auto !important;
+  max-height: 40vh;
+}
