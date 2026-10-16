@@ -899,3 +899,8 @@
 .tree-children { margin-left: 8px; padding-left: 4px; }
 .tree-children:empty { display: none; }
 .twist { width: 10px; line-height: 1; }
+
+.zoom-input{width:52px;text-align:center;border-radius:6px;border:1px solid #475569;background:#1b2433;color:#fff;height:28px}
+.right-stack .elements-panel,.right-stack .cases-panel{max-height:none !important;}
+.right-stack .browser-col{flex:var(--browser-flex,55) 1 0% !important;min-height:180px !important;}
+.splitter{touch-action:none;user-select:none;}

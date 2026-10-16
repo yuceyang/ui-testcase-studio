@@ -179,3 +179,16 @@ def auto_tree_from_nav(
             pt = f"{cname}查询" if cname != PLACEHOLDER else f"{mname}查询"
             tree.append(new_node(pt, "point", target["id"], url=url_of(c)))
     return tree
+
+
+def descendants_of_ids(ids: set, tree: list[dict]) -> set:
+    """返回 ids 的全部子孙节点 id（不含自身，调用方自行并集）。"""
+    idset = set(ids)
+    changed = True
+    while changed:
+        changed = False
+        for n in tree:
+            if n.get("parent_id") in idset and n.get("id") not in idset:
+                idset.add(n["id"])
+                changed = True
+    return idset - set(ids)

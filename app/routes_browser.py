@@ -307,14 +307,10 @@ def preview_cases(payload: dict | None = None):
     )
     pids = set(payload.get("point_ids") or [])
     if pids:
-        from .browser.tree import path_of
+        from .browser.tree import descendants_of_ids
 
-        cases = [
-            c
-            for c in cases
-            if c.point_id in pids
-            or any(n.get("id") in pids for n in path_of(c.point_id, tree))
-        ]
+        scope = set(pids) | descendants_of_ids(pids, tree)
+        cases = [c for c in cases if c.point_id in scope]
     return {
         "ok": True,
         "count": len(cases),

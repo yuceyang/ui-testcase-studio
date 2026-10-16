@@ -1062,6 +1062,38 @@ function selectedTreeIds() {
 }
 
 /** 生成用例范围：勾选优先，否则当前单击选中的节点 */
+function inScope(pointId, rootIds) {
+  if (!pointId) return false;
+  const roots = new Set(rootIds);
+  const ids = new Set([pointId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const n of state.tree) {
+      if (ids.has(n.parent_id) && !ids.has(n.id)) {
+        ids.add(n.id);
+        changed = true;
+      }
+    }
+  }
+  // pointId 在某个勾选子树内
+  for (const root of roots) {
+    const sub = new Set([root]);
+    let ch = true;
+    while (ch) {
+      ch = false;
+      for (const n of state.tree) {
+        if (sub.has(n.parent_id) && !sub.has(n.id)) {
+          sub.add(n.id);
+          ch = true;
+        }
+      }
+    }
+    if (sub.has(pointId)) return true;
+  }
+  return false;
+}
+
 function generateScopeIds() {
   const checked = selectedTreeIds();
   if (checked.length) return checked;
@@ -1781,9 +1813,12 @@ $("#btn-go-cases").addEventListener("click", async () => {
         sys_name: "",
       },
     });
-    window._lastCases = r.cases || [];
+    const scope = new Set(ids);
+    const all = r.cases || [];
+    // 双保险：仅保留 scope（含子树）内用例
+    window._lastCases = all.filter((c) => scope.has(c.point_id) || inScope(c.point_id, ids));
     renderPreview({ cases: window._lastCases, mode: "preview" });
-    toast(`已生成 ${r.count} 条未入库用例，请确认后点「生成入库」`, "ok");
+    toast(`已生成 ${window._lastCases.length} 条未入库用例，请确认后点「生成入库」`, "ok");
   } catch (e) {
     toast(e.message, "err");
   }
@@ -2049,7 +2084,12 @@ function applyZoom() {
   const img = $("#live-img");
   if (!img) return;
   img.style.width = 100 * liveZoom + "%";
-  $("#zoom-label").textContent = Math.round(liveZoom * 100) + "%";
+  const box = $("#zoom-label");
+  if (box) {
+    if (document.activeElement !== box) {
+      box.value = String(Math.round(liveZoom * 100));
+    }
+  }
   drawGhost();
 }
 function setZoom(z) {
@@ -2057,9 +2097,23 @@ function setZoom(z) {
   applyZoom();
 }
 function initZoom() {
-  $("#btn-zoom-in") && $("#btn-zoom-in").addEventListener("click", () => setZoom(liveZoom + 0.1));
-  $("#btn-zoom-out") && $("#btn-zoom-out").addEventListener("click", () => setZoom(liveZoom - 0.1));
+  $("#btn-zoom-in") && $("#btn-zoom-in").addEventListener("click", () => setZoom(liveZoom + 0.01));
+  $("#btn-zoom-out") && $("#btn-zoom-out").addEventListener("click", () => setZoom(liveZoom - 0.01));
   $("#btn-zoom-reset") && $("#btn-zoom-reset").addEventListener("click", () => setZoom(1));
+  const zbox = $("#zoom-label");
+  if (zbox) {
+    zbox.addEventListener("change", () => {
+      const v = parseFloat(String(zbox.value).replace("%", ""));
+      if (!isNaN(v) && v >= 50 && v <= 300) setZoom(v / 100);
+      else {
+        toast("缩放请输入 50–300");
+        zbox.value = String(Math.round(liveZoom * 100));
+      }
+    });
+    zbox.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") zbox.blur();
+    });
+  }
   const stage = $("#live-stage");
   stage &&
     stage.addEventListener(
