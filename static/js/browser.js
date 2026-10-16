@@ -987,9 +987,18 @@ function renderTree() {
               .join("")}</div>`
       }`
     : "";
-  $("#tree").innerHTML =
-    (rootNodes.map(nodeHtml).join("") + unboundHtml) ||
-    `<div class="muted" style="padding:12px">空树。「自动建树」或右键镜像添加。</div>`;
+  const htmlTree = rootNodes.map(nodeHtml).join("") + unboundHtml;
+  if (!htmlTree.trim()) {
+    $("#tree").innerHTML = `
+      <div class="tree-empty">
+        <div class="tree-empty-title">尚未建立功能点树</div>
+        <div class="muted">1. 在镜像中登录并「发现元素」</div>
+        <div class="muted">2. 「自动建树」或使用 ＋新增 / 批量标记为…</div>
+        <div class="muted">3. 结构：模块 → 一/二/三级 → 功能点（缺级用 /）</div>
+      </div>`;
+  } else {
+    $("#tree").innerHTML = htmlTree;
+  }
 
   const total = (state.committedCases || []).length;
   const el = $("#tree-case-total");
@@ -1234,13 +1243,41 @@ function descendantsOf(id) {
 function fillParentOptions(sel, excludeId, selectedParent) {
   const skip = excludeId ? descendantsOf(excludeId) : new Set();
   const rows = state.tree.filter((n) => !skip.has(n.id));
+  // 按层级缩进，父子关系一目了然
+  const byParent = {};
+  for (const n of rows) {
+    const p = n.parent_id || "";
+    (byParent[p] = byParent[p] || []).push(n);
+  }
+  const typeShort = {
+    module: "模块",
+    title1: "一级",
+    title2: "二级",
+    title3: "三级",
+    point: "功能点",
+    case: "用例",
+  };
+  const ordered = [];
+  const walk = (pid, depth) => {
+    for (const n of byParent[pid] || []) {
+      ordered.push({ n, depth });
+      walk(n.id, depth + 1);
+    }
+  };
+  walk("", 0);
+  // 父不在列表里的孤儿也收进来
+  for (const n of rows) {
+    if (!ordered.some((x) => x.n.id === n.id)) ordered.push({ n, depth: 0 });
+  }
   sel.innerHTML =
     `<option value="">（顶层）</option>` +
-    rows
-      .map(
-        (n) =>
-          `<option value="${n.id}" ${n.id === selectedParent ? "selected" : ""}>${esc(n.name)} · ${n.node_type}</option>`
-      )
+    ordered
+      .map(({ n, depth }) => {
+        const indent = "　".repeat(Math.min(depth, 6));
+        const label = `${indent}${n.name} (${typeShort[n.node_type] || n.node_type})`;
+        const selAttr = n.id === selectedParent ? " selected" : "";
+        return `<option value="${n.id}"${selAttr}>${esc(label)}</option>`;
+      })
       .join("");
 }
 
@@ -1258,7 +1295,7 @@ function openMarkAs(elId, bulkIds) {
     : "";
   $("#mka-name").disabled = bulk.length > 0;
   const cur = state.tree.find((n) => n.id === state.selectedNodeId);
-  $("#mka-type").value = cur && cur.node_type !== "module" ? "point" : "module";
+  $("#mka-type").value = "point";
   fillParentOptions($("#mka-parent"), null, cur ? cur.id : "");
   $("#modal-mark-as").dataset.bulk = JSON.stringify(bulk);
   $("#modal-mark-as").classList.remove("hidden");
