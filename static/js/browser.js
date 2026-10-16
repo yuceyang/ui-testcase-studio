@@ -924,7 +924,7 @@ function renderTree() {
       : cs
           .map(
             (c) => `
-      <div class="tree-node tree-case" data-id="${c.id}" data-point="${c.point_id || ""}">
+      <div class="tree-node tree-case" data-id="${c.id}" data-point="${c.point_id || ""}" style="height:24px;min-height:24px;max-height:24px;line-height:24px;margin:0;padding:0 4px">
         <input type="checkbox" class="tree-check" data-id="${c.id}" ${
               state.checkedIds.has(c.id) ? "checked" : ""
             } />
@@ -935,7 +935,7 @@ function renderTree() {
           .join("");
     const childHtml = collapsed ? "" : kids.map(nodeHtml).join("");
     return `
-      <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}">
+      <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}" style="height:24px;min-height:24px;max-height:24px;line-height:24px;margin:0;padding:0 4px">
         <span class="twist ${hasKids ? "" : "empty"}" data-twist="${n.id}" title="折叠/展开">${
           hasKids ? (collapsed ? "▸" : "▾") : "·"
         }</span>
@@ -959,7 +959,7 @@ function renderTree() {
   const unbound = casesByPoint["__unbound__"] || [];
   const unboundHtml = unbound.length
     ? `
-      <div class="tree-node unbound-root" data-id="__unbound__">
+      <div class="tree-node unbound-root" data-id="__unbound__" style="height:24px;min-height:24px;max-height:24px;line-height:24px;margin:0;padding:0 4px">
         <span class="twist" data-twist="__unbound__">${
           state.collapsedIds.has("__unbound__") ? "▸" : "▾"
         }</span>

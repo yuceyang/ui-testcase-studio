@@ -942,3 +942,24 @@
   padding: 0 !important;
 }
 .tree .tree-children > .tree-node { border: 0; }
+
+/* 空节点行距统一（覆盖旧规则） */
+#tree, #tree * {
+  box-sizing: border-box;
+}
+#tree .tree-node {
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  margin: 0 !important;
+  padding: 0 4px !important;
+  gap: 4px !important;
+}
+#tree .tree-children {
+  margin: 0 0 0 8px !important;
+  padding: 0 !important;
+  border-left: 1px solid var(--line);
+}
+#tree .tree-children > .tree-node {
+  margin-left: 4px !important;
+}
