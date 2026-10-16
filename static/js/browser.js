@@ -2190,22 +2190,21 @@ function initSplitters() {
         const move = (e) => {
           const dy = e.clientY - startY;
           if (kind === "right-v") {
-            const maxB = window.innerHeight * 0.85;
+            // 浏览器预览：可拉到约 2.2 屏（近全屏/更长）
+            const maxB = window.innerHeight * 2.2;
+            const minB = 220;
             brow.style.flex = "none";
-            brow.style.height = Math.min(Math.max(160, hb + dy), maxB) + "px";
+            brow.style.height = Math.min(Math.max(minB, hb + dy), maxB) + "px";
             elp.style.flex = "0 0 auto";
             elp.style.height = "auto";
-            elp.style.maxHeight = "none";
             cap.style.flex = "0 0 auto";
             cap.style.height = "auto";
-            cap.style.maxHeight = "none";
           } else {
-            // 用例台：可无限向下
+            // 元素 / 用例：绝对像素，无上限
             cap.style.flex = "none";
             cap.style.height = Math.max(120, hc - dy) + "px";
             elp.style.flex = "0 0 auto";
             elp.style.height = "auto";
-            elp.style.maxHeight = "none";
           }
         };
         const up = () => {

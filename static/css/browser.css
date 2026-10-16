@@ -1524,3 +1524,53 @@ html, body {
 .live-wrap, .live-stage {
   max-height: calc(85vh - 50px) !important;
 }
+
+/* 自由拖拽：页面整体撑高 + 全局滚动 */
+html, body {
+  min-height: 100vh !important;
+  height: auto !important;
+  overflow-y: visible !important;
+  overflow-x: hidden !important;
+}
+.workspace, .layout-2 {
+  height: auto !important;
+  min-height: calc(100vh - 96px) !important;
+  overflow: visible !important;
+}
+.right-stack {
+  overflow: visible !important;
+}
+#browser-col {
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.live-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none !important;
+  overflow: hidden;
+}
+.live-stage {
+  height: 100% !important;
+  min-height: 240px !important;
+  max-height: none !important;
+  overflow: auto !important;
+}
+#live-img {
+  width: 100% !important;
+  height: auto !important;
+  max-height: none !important;
+  object-fit: contain;
+  background: #0b1220;
+}
+#elements-panel, #cases-panel {
+  max-height: none !important;
+  overflow: visible !important;
+}
+#el-body, .el-table-wrap, #case-preview, #cases-body {
+  overflow: visible !important;
+  max-height: none !important;
+  height: auto !important;
+}
