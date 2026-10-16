@@ -937,7 +937,7 @@ function renderTree() {
     return `
       <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}" style="height:24px;min-height:24px;max-height:24px;line-height:24px;margin:0;padding:0 4px">
         <span class="twist ${hasKids ? "" : "empty"}" data-twist="${n.id}" title="折叠/展开">${
-          hasKids ? (collapsed ? "▸" : "▾") : ""
+          hasKids ? (collapsed ? "▸" : "▾") : "&nbsp;"
         }</span>
         <input type="checkbox" class="tree-check" data-id="${n.id}" ${
           state.checkedIds.has(n.id) ? "checked" : ""
