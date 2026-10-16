@@ -937,7 +937,7 @@ function renderTree() {
     return `
       <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}" style="height:24px;min-height:24px;max-height:24px;line-height:24px;margin:0;padding:0 4px">
         <span class="twist ${hasKids ? "" : "empty"}" data-twist="${n.id}" title="折叠/展开">${
-          hasKids ? (collapsed ? "▸" : "▾") : "·"
+          hasKids ? (collapsed ? "▸" : "▾") : ""
         }</span>
         <input type="checkbox" class="tree-check" data-id="${n.id}" ${
           state.checkedIds.has(n.id) ? "checked" : ""
@@ -2049,86 +2049,118 @@ function initSplitters() {
   const root = document.documentElement;
   const saved = JSON.parse(localStorage.getItem("qts_layout") || "{}");
   if (saved.leftW) root.style.setProperty("--left-w", saved.leftW + "px");
-  if (saved.treeFlex) root.style.setProperty("--tree-flex", saved.treeFlex);
-  if (saved.sideFlex) root.style.setProperty("--side-flex", saved.sideFlex);
-  if (saved.browserFlex) root.style.setProperty("--browser-flex", saved.browserFlex);
-  if (saved.elemFlex) root.style.setProperty("--elem-flex", saved.elemFlex);
-  if (saved.casesFlex) root.style.setProperty("--cases-flex", saved.casesFlex);
 
   const persist = () => {
-    const cs = getComputedStyle(root);
+    const tree = $("#tree-panel");
+    const side = $("#side-panel");
     localStorage.setItem(
       "qts_layout",
       JSON.stringify({
-        leftW: parseInt(cs.getPropertyValue("--left-w")) || 320,
-        treeFlex: parseFloat(cs.getPropertyValue("--tree-flex")) || 52,
-        sideFlex: parseFloat(cs.getPropertyValue("--side-flex")) || 48,
-        browserFlex: parseFloat(cs.getPropertyValue("--browser-flex")) || 62,
-        elemFlex: parseFloat(cs.getPropertyValue("--elem-flex")) || 38,
-        casesFlex: parseFloat(cs.getPropertyValue("--cases-flex")) || 30,
+        leftW: parseInt(getComputedStyle(root).getPropertyValue("--left-w")) || 320,
+        treeH: tree ? tree.getBoundingClientRect().height : 0,
+        sideH: side ? side.getBoundingClientRect().height : 0,
       })
     );
   };
 
+  // 初始高度
+  const treeEl = $("#tree-panel");
+  const sideEl = $("#side-panel");
+  if (treeEl && saved.treeH) {
+    treeEl.style.flex = "none";
+    treeEl.style.height = saved.treeH + "px";
+    sideEl.style.flex = "1";
+    sideEl.style.height = "auto";
+  }
+
   $$(".splitter").forEach((sp) => {
     sp.addEventListener("pointerdown", (ev) => {
       ev.preventDefault();
+      ev.stopPropagation();
       sp.classList.add("active");
-      sp.setPointerCapture(ev.pointerId);
+      try {
+        sp.setPointerCapture(ev.pointerId);
+      } catch {
+        /* ignore */
+      }
       const kind = sp.dataset.split;
-      const startX = ev.clientX;
       const startY = ev.clientY;
-      const cs = getComputedStyle(root);
-      const leftW = parseInt(cs.getPropertyValue("--left-w")) || 320;
-      const treeFlex = parseFloat(cs.getPropertyValue("--tree-flex")) || 52;
-      const sideFlex = parseFloat(cs.getPropertyValue("--side-flex")) || 48;
-      const browserFlex = parseFloat(cs.getPropertyValue("--browser-flex")) || 62;
-      const elemFlex = parseFloat(cs.getPropertyValue("--elem-flex")) || 38;
-      const leftEl = $("#left-stack");
-      const rightEl = $("#right-stack");
-      const treeEl = $("#tree-panel");
-      const sideEl = $("#side-panel");
-      const browEl = $("#browser-col");
-      const elEl = $("#elements-panel");
+      const startX = ev.clientX;
 
-      const move = (e) => {
-        if (kind === "main-v") {
-          const w = Math.min(Math.max(leftW + (e.clientX - startX), 220), 560);
+      if (kind === "left-v") {
+        const tEl = $("#tree-panel");
+        const sEl = $("#side-panel");
+        const h0 = tEl.getBoundingClientRect().height;
+        const move = (e) => {
+          const h = Math.max(80, h0 + (e.clientY - startY));
+          tEl.style.flex = "none";
+          tEl.style.height = h + "px";
+          sEl.style.flex = "1 1 auto";
+          sEl.style.height = "auto";
+        };
+        const up = () => {
+          sp.classList.remove("active");
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          persist();
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+        return;
+      }
+
+      if (kind === "main-v") {
+        const leftEl = $("#left-stack");
+        const w0 = leftEl.getBoundingClientRect().width;
+        const move = (e) => {
+          const w = Math.min(Math.max(w0 + (e.clientX - startX), 220), 560);
           root.style.setProperty("--left-w", w + "px");
-        } else if (kind === "left-v") {
-          const h = leftEl.clientHeight || 1;
+        };
+        const up = () => {
+          sp.classList.remove("active");
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          persist();
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+        return;
+      }
+
+      if (kind === "right-v" || kind === "cases-v") {
+        const rightEl = $("#right-stack");
+        const brow = $("#browser-col");
+        const elp = $("#elements-panel");
+        const cap = $("#cases-panel");
+        const hb = brow.getBoundingClientRect().height;
+        const he = elp.getBoundingClientRect().height;
+        const hc = cap.getBoundingClientRect().height;
+        const move = (e) => {
           const dy = e.clientY - startY;
-          const t = Math.min(Math.max(treeFlex + (dy / h) * 100, 25), 80);
-          root.style.setProperty("--tree-flex", t);
-          root.style.setProperty("--side-flex", 100 - t);
-        } else if (kind === "right-v") {
-          const h = rightEl.clientHeight || 1;
-          const dy = e.clientY - startY;
-          const t = Math.min(Math.max(browserFlex + (dy / h) * 100, 35), 85);
-          root.style.setProperty("--browser-flex", t);
-          root.style.setProperty("--elem-flex", 100 - t - (parseFloat(cs.getPropertyValue("--cases-flex")) || 30));
-        } else if (kind === "cases-v") {
-          const h = rightEl.clientHeight || 1;
-          const dy = e.clientY - startY;
-          const c0 = parseFloat(cs.getPropertyValue("--cases-flex")) || 30;
-          const c = Math.min(Math.max(c0 + (-dy / h) * 100, 15), 55);
-          root.style.setProperty("--cases-flex", c);
-        }
-        drawGhost();
-      };
-      const up = () => {
-        sp.classList.remove("active");
-        sp.removeEventListener("pointermove", move);
-        sp.removeEventListener("pointerup", up);
-        persist();
-      };
-      sp.addEventListener("pointermove", move);
-      sp.addEventListener("pointerup", up);
+          if (kind === "right-v") {
+            brow.style.flex = "none";
+            brow.style.height = Math.max(160, hb + dy) + "px";
+            elp.style.flex = "1 1 auto";
+            elp.style.height = "auto";
+          } else {
+            cap.style.flex = "none";
+            cap.style.height = Math.max(100, hc - dy) + "px";
+            elp.style.flex = "1 1 auto";
+            elp.style.height = "auto";
+          }
+        };
+        const up = () => {
+          sp.classList.remove("active");
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      }
     });
   });
 }
 
-/* ================= 浏览器弹出窗 ================= */
 function initPopout() {
   const pop = $("#popout-browser");
   const body = $("#popout-body");
