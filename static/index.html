@@ -316,8 +316,33 @@
       </div>
 
       <div class="actions">
+        <button id="btn-ai-edit" class="btn accent">AI修改</button>
         <button id="btn-save-case" class="btn primary">保存</button>
         <button id="btn-close-case" class="btn ghost">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 修改 -->
+  <div id="modal-ai-edit" class="modal hidden">
+    <div class="modal-box">
+      <h3>AI 修改用例</h3>
+      <div class="muted">选择字段 + 提示词，按「已有内容 + 提示词」改写后回填，可再手改。</div>
+      <div class="checks" style="margin:10px 0">
+        <label><input type="checkbox" class="ai-field" value="design_req" checked /> 设计需求</label>
+        <label><input type="checkbox" class="ai-field" value="steps" checked /> 操作说明</label>
+        <label><input type="checkbox" class="ai-field" value="expected" checked /> 期望结果</label>
+        <label><input type="checkbox" class="ai-field" value="preconditions" /> 前提与约束</label>
+        <label><input type="checkbox" class="ai-field" value="title" /> 用例标题</label>
+        <label><input type="checkbox" class="ai-field" value="remark" /> 备注</label>
+      </div>
+      <label class="field"><span>提示词</span>
+        <textarea id="ai-prompt" rows="3" placeholder="例：期望结果更细，补边界值；步骤写到按钮名称"></textarea>
+      </label>
+      <div class="actions">
+        <button id="btn-ai-generate" class="btn primary">生成</button>
+        <button id="btn-ai-cancel" class="btn ghost">取消</button>
+        <span id="ai-loading" class="muted hidden">AI 生成中…</span>
       </div>
     </div>
   </div>

@@ -1761,6 +1761,59 @@ function openCaseDetail(i) {
 
 $("#btn-close-case") &&
   $("#btn-close-case").addEventListener("click", () => $("#modal-case").classList.add("hidden"));
+
+/* AI 修改 */
+$("#btn-ai-edit") &&
+  $("#btn-ai-edit").addEventListener("click", () => {
+    $("#ai-prompt").value = "";
+    $("#ai-loading").classList.add("hidden");
+    $("#btn-ai-generate").disabled = false;
+    $("#modal-ai-edit").classList.remove("hidden");
+  });
+$("#btn-ai-cancel") &&
+  $("#btn-ai-cancel").addEventListener("click", () => $("#modal-ai-edit").classList.add("hidden"));
+
+$("#btn-ai-generate") &&
+  $("#btn-ai-generate").addEventListener("click", async () => {
+    const prompt = $("#ai-prompt").value.trim();
+    if (!prompt) return toast("请填写提示词", "err");
+    const fields = $$(".ai-field:checked").map((x) => x.value);
+    if (!fields.length) return toast("请勾选要修改的字段", "err");
+    const id = $("#cd-id").value;
+    const current = {
+      title: $("#cd-title").value,
+      design_req: $("#cd-design").value,
+      preconditions: $("#cd-pre").value,
+      steps: $("#cd-steps").value,
+      expected: $("#cd-exp").value,
+      remark: $("#cd-remark").value,
+      test_track: $("#cd-track").value,
+    };
+    const btn = $("#btn-ai-generate");
+    btn.disabled = true;
+    $("#ai-loading").classList.remove("hidden");
+    try {
+      const r = await api("/api/case/ai-edit", {
+        method: "POST",
+        body: { caseId: id, currentContent: current, prompt, fields },
+      });
+      const d = r.data || {};
+      if (fields.includes("title") || "title" in d) $("#cd-title").value = d.title ?? $("#cd-title").value;
+      if (fields.includes("design_req") || "design_req" in d) $("#cd-design").value = d.design_req ?? $("#cd-design").value;
+      if (fields.includes("preconditions") || "preconditions" in d) $("#cd-pre").value = d.preconditions ?? $("#cd-pre").value;
+      if (fields.includes("steps") || "steps" in d) $("#cd-steps").value = d.steps ?? $("#cd-steps").value;
+      if (fields.includes("expected") || "expected" in d) $("#cd-exp").value = d.expected ?? $("#cd-exp").value;
+      if (fields.includes("remark") || "remark" in d) $("#cd-remark").value = d.remark ?? $("#cd-remark").value;
+      $("#modal-ai-edit").classList.add("hidden");
+      toast(r.mode === "ai" ? "AI 已改写并回填，可继续手改" : "已生成建议（演示模式），请手改确认", "ok");
+    } catch (e) {
+      toast("AI 修改失败: " + e.message, "err");
+    } finally {
+      btn.disabled = false;
+      $("#ai-loading").classList.add("hidden");
+    }
+  });
+
 $("#btn-save-case") &&
   $("#btn-save-case").addEventListener("click", () => {
     const i = (window._lastCases || []).findIndex((x) => x.id === $("#cd-id").value);

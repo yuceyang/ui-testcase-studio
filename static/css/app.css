@@ -331,3 +331,6 @@ textarea { resize: vertical; font-family: inherit; }
   display: flex; justify-content: space-between; align-items: center;
 }
 .file-list a { color: var(--accent); text-decoration: none; }
+
+#modal-shot{z-index:70}
+#modal-ai-edit{z-index:75}
