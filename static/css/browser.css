@@ -1574,3 +1574,63 @@ html, body {
   max-height: none !important;
   height: auto !important;
 }
+
+/* ===== 稳健视口布局：禁止整页撑爆 / 黑框 ===== */
+html, body {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+}
+.workspace, .layout-2 {
+  height: calc(100vh - 96px) !important;
+  min-height: 0 !important;
+  max-height: calc(100vh - 96px) !important;
+  overflow: hidden !important;
+}
+.left-stack, .right-stack {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+#browser-col {
+  flex: 1 1 0% !important;
+  min-height: 180px !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  background: #fff !important;
+}
+.live-wrap {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  background: #fff !important;
+}
+.live-stage {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: 100% !important;
+  overflow: auto !important;
+  background: #fff !important;
+}
+.live-stage img, #live-frame, #live-frame img {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: auto !important;
+  height: auto !important;
+}
+#elements-panel, #cases-panel, #tree-panel, #side-panel {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+#el-body .el-table-wrap, #case-preview, #tree, #marked-list {
+  overflow-y: auto !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+}
+#elements-panel { flex: 1 1 0% !important; max-height: 45vh !important; }
+#cases-panel { flex: 1 1 0% !important; max-height: 35vh !important; }
+#side-panel { flex: 0 0 auto !important; max-height: 55% !important; min-height: 160px !important; }
+#tree-panel { flex: 1 1 0% !important; min-height: 120px !important; max-height: calc(100% - 160px) !important; }
