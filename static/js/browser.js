@@ -2141,15 +2141,14 @@ function initSplitters() {
         const stackH = $("#left-stack").getBoundingClientRect().height;
         const h0 = tEl.getBoundingClientRect().height;
         const move = (e) => {
-          // 固定 delta，避免累加误差；限制树/已标最大高度
-          const maxTree = window.innerHeight * 0.75;
-          const h = Math.min(Math.max(120, h0 + (e.clientY - startY)), maxTree);
+          // 像素绝对高度，可超出视口；页面 body 滚
+          const h = Math.max(120, h0 + (e.clientY - startY));
           tEl.style.flex = "none";
           tEl.style.height = h + "px";
           sEl.style.flex = "0 0 auto";
           sEl.style.height = "auto";
           sEl.style.minHeight = "160px";
-          sEl.style.maxHeight = "55vh";
+          sEl.style.maxHeight = "none";
         };
         const up = () => {
           sp.classList.remove("active");
@@ -2196,17 +2195,17 @@ function initSplitters() {
             brow.style.height = Math.min(Math.max(160, hb + dy), maxB) + "px";
             elp.style.flex = "0 0 auto";
             elp.style.height = "auto";
-            elp.style.maxHeight = "45vh";
+            elp.style.maxHeight = "none";
             cap.style.flex = "0 0 auto";
             cap.style.height = "auto";
-            cap.style.maxHeight = "40vh";
+            cap.style.maxHeight = "none";
           } else {
-            const maxC = window.innerHeight * 0.5;
+            // 用例台：可无限向下
             cap.style.flex = "none";
-            cap.style.height = Math.min(Math.max(100, hc - dy), maxC) + "px";
+            cap.style.height = Math.max(120, hc - dy) + "px";
             elp.style.flex = "0 0 auto";
             elp.style.height = "auto";
-            elp.style.maxHeight = "45vh";
+            elp.style.maxHeight = "none";
           }
         };
         const up = () => {

@@ -1468,3 +1468,59 @@ html, body {
   min-height: calc(100vh - 96px);
   height: auto;
 }
+
+/* 无限下拉：页面随拖拽变高，body 全局滚动 */
+html, body {
+  height: auto !important;
+  min-height: 100vh !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+}
+.workspace, .layout-2 {
+  height: auto !important;
+  min-height: calc(100vh - 96px) !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.left-stack {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+#tree-panel {
+  max-height: none !important;
+}
+#side-panel {
+  max-height: none !important;
+  min-height: 160px !important;
+  overflow: visible !important;
+}
+#marked-body, #marked-list {
+  max-height: none !important;
+  overflow: visible !important;
+  height: auto !important;
+}
+#cases-panel {
+  max-height: none !important;
+  min-height: 120px !important;
+  overflow: visible !important;
+}
+#case-preview {
+  max-height: none !important;
+  overflow: visible !important;
+  height: auto !important;
+}
+#elements-panel {
+  max-height: none !important;
+}
+#el-body, .el-table-wrap {
+  overflow: visible !important;
+  max-height: none !important;
+}
+/* 浏览器仍限制，避免深色区无限拉高 */
+#browser-col {
+  max-height: 85vh !important;
+}
+.live-wrap, .live-stage {
+  max-height: calc(85vh - 50px) !important;
+}
