@@ -2090,13 +2090,15 @@ function initSplitters() {
       if (kind === "left-v") {
         const tEl = $("#tree-panel");
         const sEl = $("#side-panel");
+        const stackH = $("#left-stack").getBoundingClientRect().height;
         const h0 = tEl.getBoundingClientRect().height;
         const move = (e) => {
-          const h = Math.max(80, h0 + (e.clientY - startY));
+          const minSide = 160;
+          const h = Math.min(Math.max(120, h0 + (e.clientY - startY)), stackH - minSide);
           tEl.style.flex = "none";
           tEl.style.height = h + "px";
-          sEl.style.flex = "1 1 auto";
-          sEl.style.height = "auto";
+          sEl.style.flex = "0 0 auto";
+          sEl.style.height = Math.max(minSide, stackH - h) + "px";
         };
         const up = () => {
           sp.classList.remove("active");
