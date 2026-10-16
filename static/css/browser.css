@@ -963,3 +963,24 @@
 #tree .tree-children > .tree-node {
   margin-left: 4px !important;
 }
+
+/* 同级对齐：箭头槽位固定宽，空/有子一致 */
+#tree .twist {
+  width: 14px !important;
+  min-width: 14px !important;
+  max-width: 14px !important;
+  display: inline-block;
+  text-align: center;
+  visibility: visible;
+}
+#tree .twist.empty {
+  visibility: hidden;
+}
+#tree .tree-node {
+  padding-left: 2px !important;
+  gap: 2px !important;
+}
+#tree .tree-root > .tree-node {
+  background: #eef2ff;
+  font-weight: 600;
+}

@@ -976,7 +976,7 @@ function renderTree() {
           : `<div class="tree-children">${unbound
               .map(
                 (c) => `
-        <div class="tree-node tree-case" data-id="${c.id}" data-point="__unbound__">
+        <div class="tree-node tree-case" data-id="${c.id}" data-point="__unbound__" style="height:24px;min-height:24px;max-height:24px;line-height:24px;margin:0;padding:0 4px">
           <input type="checkbox" class="tree-check" data-id="${c.id}" ${
                   state.checkedIds.has(c.id) ? "checked" : ""
                 } />
@@ -987,8 +987,31 @@ function renderTree() {
               .join("")}</div>`
       }`
     : "";
-  const htmlTree = rootNodes.map(nodeHtml).join("") + unboundHtml;
-  if (!htmlTree.trim()) {
+
+  const total = (state.committedCases || []).length;
+  const allChecked =
+    state.tree.length > 0 &&
+    state.tree.every((n) => state.checkedIds.has(n.id));
+  const rootCollapsed = state.collapsedIds.has("__root__");
+  const bodyHtml = rootCollapsed
+    ? ""
+    : `<div class="tree-children">${
+        rootNodes.map(nodeHtml).join("") + unboundHtml
+      }</div>`;
+  const htmlTree = `
+    <div class="tree-root">
+      <div class="tree-node" data-id="__root__" style="height:24px;min-height:24px;max-height:24px;line-height:24px;margin:0;padding:0 4px">
+        <span class="twist" data-twist="__root__">${rootCollapsed ? "▸" : "▾"}</span>
+        <input type="checkbox" class="tree-check" data-id="__root__" ${
+          allChecked ? "checked" : ""
+        } title="全选/全不选" />
+        <span class="badge-sm module">根</span>
+        <span class="nm">项目全部用例</span>
+        <span class="case-cnt">${total} 用例</span>
+      </div>
+      ${bodyHtml}
+    </div>`;
+  if (!rootNodes.length && !unbound.length) {
     $("#tree").innerHTML = `
       <div class="tree-empty">
         <div class="tree-empty-title">尚未建立功能点树</div>
@@ -999,8 +1022,12 @@ function renderTree() {
   } else {
     $("#tree").innerHTML = htmlTree;
   }
-
-  const total = (state.committedCases || []).length;
+  const el = $("#tree-case-total");
+  if (el) {
+    el.textContent = total + " 用例";
+    el.style.display = "none"; // 总数已挪到根节点
+  }
+const total = (state.committedCases || []).length;
   const el = $("#tree-case-total");
   if (el) el.textContent = total + " 用例";
 
@@ -1042,6 +1069,21 @@ function renderTree() {
     const id = cb.dataset.id;
     const owner = cb.closest(".tree-node");
     const ownerPoint = owner && owner.dataset.point;
+    if (id === "__root__") {
+      cb.addEventListener("click", (ev) => ev.stopPropagation());
+      cb.addEventListener("change", (ev) => {
+        ev.stopPropagation();
+        if (cb.checked) {
+          state.tree.forEach((n) => state.checkedIds.add(n.id));
+          (state.committedCases || []).forEach((c) => state.checkedIds.add(c.id));
+          state.checkedIds.add("__unbound__");
+        } else {
+          state.checkedIds.clear();
+        }
+        renderTree();
+      });
+      return;
+    }
     cb.addEventListener("click", (ev) => ev.stopPropagation());
     cb.addEventListener("mousedown", (ev) => ev.stopPropagation());
     cb.addEventListener("change", (ev) => {
@@ -1067,7 +1109,11 @@ function renderTree() {
 }
 
 function selectedTreeIds() {
-  return Array.from(state.checkedIds || []);
+  const ids = state.checkedIds || new Set();
+  if (ids.has("__root__")) {
+    return state.tree.map((n) => n.id);
+  }
+  return Array.from(ids).filter((x) => x !== "__unbound__");
 }
 
 /** 生成用例范围：勾选优先，否则当前单击选中的节点 */
