@@ -1427,3 +1427,44 @@ html, body {
 #tree, #marked-list, .el-table-wrap, #case-preview {
   overflow-y: auto !important;
 }
+
+/* 防拖拽撑出巨型黑区 */
+.live-wrap, .live-stage, #browser-col {
+  background: #0b1220;
+}
+#browser-col {
+  max-height: 85vh !important;
+  overflow: hidden !important;
+}
+.live-wrap {
+  max-height: calc(85vh - 48px) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.live-stage {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  height: auto !important;
+  overflow: auto !important;
+}
+#elements-panel {
+  max-height: 45vh !important;
+  overflow: hidden !important;
+}
+#cases-panel {
+  max-height: 40vh !important;
+  overflow: hidden !important;
+}
+#side-panel {
+  max-height: 55vh !important;
+}
+#tree-panel {
+  max-height: calc(100vh - 200px) !important;
+}
+.workspace, .layout-2 {
+  overflow: visible;
+  min-height: calc(100vh - 96px);
+  height: auto;
+}
