@@ -1351,3 +1351,17 @@
   height: 100% !important;
   overflow-y: auto !important;
 }
+
+/* 左栏不锁死，仅限最高 */
+.workspace, .layout-2 {
+  height: auto !important;
+  min-height: calc(100vh - 96px) !important;
+  overflow: visible !important;
+}
+.left-stack {
+  height: auto !important;
+  max-height: calc(100vh - 120px) !important;
+  overflow: hidden !important;
+}
+.collapse-toggle { pointer-events: auto; }
+.col-head.collapsible { cursor: default; }

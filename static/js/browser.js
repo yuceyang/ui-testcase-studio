@@ -614,7 +614,7 @@ $("#live-stage").addEventListener("contextmenu", (ev) => {
 });
 
 async function clearPageMarks() {
-  if (!confirm("取消本页全部标记（不影响树上已建节点结构）？")) return;
+  
   const ids = state.elements.map((e) => e.id).concat(state.marked.map((m) => m.id));
   for (const id of ids) {
     try {
@@ -774,6 +774,21 @@ $("#btn-sel-none").addEventListener("click", () => {
   $("#el-select-all").checked = false;
   $("#el-select-all").dispatchEvent(new Event("change"));
 });
+
+$("#btn-clear-elements") &&
+  $("#btn-clear-elements").addEventListener("click", async () => {
+    if (!confirm("确认清空「交互元素」列表？（不删除已建树节点）")) return;
+    state.elements = [];
+    renderElements();
+    drawGhost();
+    toast("交互元素已清空", "ok");
+  });
+
+$("#btn-clear-marks2") &&
+  $("#btn-clear-marks2").addEventListener("click", async () => {
+    if (!confirm("确认取消本页全部标记？（与右键菜单一致）")) return;
+    await clearPageMarks();
+  });
 
 $("#btn-extract").addEventListener("click", async () => {
   try {
@@ -1968,21 +1983,45 @@ $("#btn-clear-cases") &&
   });
 
 /* 折叠 */
+function toggleCollapse(id) {
+  const body = document.getElementById(id);
+  if (!body) return;
+  const on = body.classList.toggle("collapsed");
+  $$(`[data-collapse="${id}"]`).forEach((b) => {
+    if (b.classList.contains("collapse-toggle")) b.textContent = on ? "展开" : "折叠";
+  });
+  // 折叠状态写入 layout，避免数据刷新丢
+  const st = JSON.parse(localStorage.getItem("qts_collapse") || "{}");
+  st[id] = on;
+  localStorage.setItem("qts_collapse", JSON.stringify(st));
+}
+
 function initCollapsible() {
+  const saved = JSON.parse(localStorage.getItem("qts_collapse") || "{}");
+  Object.keys(saved).forEach((id) => {
+    const body = document.getElementById(id);
+    if (body && saved[id]) {
+      body.classList.add("collapsed");
+      $$(`[data-collapse="${id}"]`).forEach((b) => {
+        if (b.classList.contains("collapse-toggle")) b.textContent = "展开";
+      });
+    }
+  });
   $$(".collapse-toggle, .col-head.collapsible").forEach((el) => {
     el.addEventListener("click", (ev) => {
-      if (ev.target.closest("button") && !ev.target.classList.contains("collapse-toggle")) {
-        // 标题栏内其它按钮不折叠
-        if (!ev.target.classList.contains("collapse-toggle")) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      // 标题内其它按钮不触发
+      if (
+        ev.target.closest("button") &&
+        !ev.target.classList.contains("collapse-toggle") &&
+        !el.classList.contains("collapse-toggle")
+      ) {
+        return;
       }
       const id = el.dataset.collapse;
       if (!id) return;
-      const body = document.getElementById(id);
-      if (!body) return;
-      const on = body.classList.toggle("collapsed");
-      $$(`[data-collapse="${id}"]`).forEach((b) => {
-        if (b.classList.contains("collapse-toggle")) b.textContent = on ? "展开" : "折叠";
-      });
+      toggleCollapse(id);
     });
   });
 }
