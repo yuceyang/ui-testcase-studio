@@ -102,83 +102,105 @@ def iter_points(tree: list[dict]) -> list[dict]:
     return [n for n in tree if n.get("node_type") in ("point", "case")]
 
 
-def ensure_child_levels(parent: dict, tree: list[dict]) -> dict:
-    """
-    在 parent 下补齐 title2/title3 占位（若 parent 是 title1），
-    返回应挂功能点的目标节点。
-    """
-    nt = parent.get("node_type")
-    if nt == "title1":
-        t2 = next((n for n in tree if n.get("parent_id") == parent["id"] and n.get("node_type") == "title2"), None)
-        if not t2:
-            t2 = new_node(PLACEHOLDER, "title2", parent["id"])
-            tree.append(t2)
-        t3 = next((n for n in tree if n.get("parent_id") == t2["id"] and n.get("node_type") == "title3"), None)
-        if not t3:
-            t3 = new_node(PLACEHOLDER, "title3", t2["id"])
-            tree.append(t3)
-        return t3
-    if nt == "title2":
-        t3 = next((n for n in tree if n.get("parent_id") == parent["id"] and n.get("node_type") == "title3"), None)
-        if not t3:
-            t3 = new_node(PLACEHOLDER, "title3", parent["id"])
-            tree.append(t3)
-        return t3
-    return parent
-
-
 def auto_tree_from_nav(
     nav_hints: list[dict],
     module_name: str = "默认模块",
     page_url: str = "",
 ) -> list[dict]:
+    """从递归导航线索生成目录树（父先子后的扁平列表，只含目录不含功能点）。
+
+    深度映射：0→module, 1→title1, 2→title2, 3→title3；
+    每个导航条目都按深度映射为目录节点，不生成 "/" 占位、不生成功能点。
     """
-    从导航菜单粗建层级。
-      模块 → 一级目录 → 二级(/) → 三级(/) → 功能点
-    nav_hints 条目：{id, name, href, level, parent, ...}
-    """
+    LEVEL_TYPE = {0: "module", 1: "title1", 2: "title2", 3: "title3"}
+
+    items: list[dict] = []
+    seen = set()
+    for idx, hint in enumerate(nav_hints or []):
+        name = (hint.get("name") or hint.get("text") or "").strip()
+        if not name:
+            continue
+        hid = hint.get("id") or f"nav_{idx}"
+        key = (hint.get("level", 0), name.casefold(), hint.get("parent") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(
+            {
+                "name": name,
+                "href": (hint.get("href") or hint.get("url") or "").strip(),
+                "level": int(hint.get("level") or 0),
+                "parent": hint.get("parent") or "",
+                "id": hid,
+                "is_sub": bool(hint.get("is_sub") or hint.get("isSub")),
+            }
+        )
+
+    if not items:
+        return [new_node(module_name, "module", None, url=page_url)]
+
+    by_nav_id = {it["id"]: it for it in items}
+    children: dict[str, list[dict]] = {}
+    for it in items:
+        parent = it["parent"] if it["parent"] in by_nav_id else ""
+        children.setdefault(parent, []).append(it)
+
     tree: list[dict] = []
 
-    def url_of(h: dict) -> str:
-        return (h.get("href") or h.get("url") or page_url or "").strip()
+    def emit(nav_id: str, app_parent_id: str | None, level: int) -> None:
+        for it in children.get(nav_id, []):
+            node_type = LEVEL_TYPE.get(level, "title3")
+            node = new_node(it["name"], node_type, app_parent_id, url=it["href"] or page_url)
+            tree.append(node)
+            emit(it["id"], node["id"], level + 1)
 
-    modules = [h for h in nav_hints if h.get("level") == 0]
-    if not modules:
-        root = new_node(module_name, "module", None, url=page_url)
-        tree.append(root)
-        for h in nav_hints[:20]:
-            name = (h.get("name") or "").strip()
-            if not name:
-                continue
-            t1 = new_node(name, "title1", root["id"], url=url_of(h))
-            tree.append(t1)
-            target = ensure_child_levels(t1, tree)
-            tree.append(new_node(f"{name}查询", "point", target["id"], url=url_of(h)))
-        return tree
-
-    for m in modules:
-        mname = (m.get("name") or "模块").strip() or "模块"
-        mod = new_node(mname, "module", None, url=url_of(m))
-        tree.append(mod)
-        mid = m.get("id") or ""
-        children = [
-            h for h in nav_hints
-            if h.get("level") == 1 and (h.get("parent") == mid or h.get("module_ref") == mid)
-        ]
-        if not children:
-            t1 = new_node(PLACEHOLDER, "title1", mod["id"], url=url_of(m))
-            tree.append(t1)
-            target = ensure_child_levels(t1, tree)
-            tree.append(new_node(f"{mname}功能", "point", target["id"], url=url_of(m)))
-            continue
-        for c in children:
-            cname = (c.get("name") or "").strip() or PLACEHOLDER
-            t1 = new_node(cname, "title1", mod["id"], url=url_of(c))
-            tree.append(t1)
-            target = ensure_child_levels(t1, tree)
-            pt = f"{cname}查询" if cname != PLACEHOLDER else f"{mname}查询"
-            tree.append(new_node(pt, "point", target["id"], url=url_of(c)))
+    emit("", None, 0)
     return tree
+
+
+def diff_auto_tree(existing_tree: list[dict], generated_tree: list[dict]) -> list[dict]:
+    """比对现有树与自动生成树，返回带 existing_id 标记的发现清单（只读，不写引擎）。
+
+    generated_tree 需为父先子后的扁平列表；每个生成节点保留其临时 id 与临时 parent_id，
+    命中的节点额外带 existing_id（现有树节点 id），未命中为 None。
+    父节点为新增节点时用哨兵标记，避免误匹配到现有根节点。
+    已存在且没有新增子孙的节点会被剪掉（功能树已有的目录不必再显示）。
+    """
+    def node_key(parent_id, node: dict) -> tuple:
+        return (parent_id, node.get("node_type"), (node.get("name") or "").strip().casefold())
+
+    existing_by_key = {
+        node_key(node.get("parent_id"), node): node.get("id")
+        for node in (existing_tree or [])
+    }
+    resolved = {}  # temp_id -> existing 字符串 id，或 False（新增节点）
+    result: list[dict] = []
+    for node in generated_tree or []:
+        parent_temp = node.get("parent_id")
+        if parent_temp:
+            parent_resolved = resolved.get(parent_temp, False)
+        else:
+            parent_resolved = None
+        existing_id = None
+        if parent_resolved is not False:
+            existing_id = existing_by_key.get(node_key(parent_resolved, node))
+        resolved[node["id"]] = existing_id if existing_id else False
+        result.append({**dict(node), "existing_id": existing_id})
+
+    children: dict = {}
+    by_id = {n["id"]: n for n in result}
+    for node in result:
+        children.setdefault(node.get("parent_id"), []).append(node)
+
+    def subtree_has_new(node_id) -> bool:
+        node = by_id.get(node_id)
+        if node is None:
+            return False
+        if node.get("existing_id") is None:
+            return True
+        return any(subtree_has_new(child["id"]) for child in children.get(node_id, []))
+
+    return [node for node in result if subtree_has_new(node["id"])]
 
 
 def descendants_of_ids(ids: set, tree: list[dict]) -> set:

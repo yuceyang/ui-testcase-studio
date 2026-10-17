@@ -13,6 +13,7 @@ from .browser.tree import (
     build_cases_from_tree,
     case_title_for,
     full_path_name,
+    diff_auto_tree,
     new_node,
     path_of,
 )
@@ -227,24 +228,19 @@ def extract():
 
 @router.post("/discover-tree")
 def discover_tree(payload: dict | None = None):
-    """自动：导航 → 树 + 当前页元素挂到功能点。"""
+    """自动：导航 → 生成发现清单（只预览，不写入树）。"""
     payload = payload or {}
     module_name = payload.get("module_name") or "默认模块"
+    existing_tree = payload.get("existing_tree")
 
-    def fn(eng, module_name):
+    def fn(eng, module_name, existing_tree):
         data = eng.extract_elements()
-        tree = auto_tree_from_nav(data.get("nav_hints") or [], module_name, data.get("url") or "")
-        # 把按钮/输入框挂到第一个功能点下，方便人工挪动
-        points = [n for n in tree if n["node_type"] == "point"]
+        generated_tree = auto_tree_from_nav(data.get("nav_hints") or [], module_name, data.get("url") or "")
         els = data.get("elements") or []
-        if points and els:
-            pts = points[0]
-            pts["element_ids"] = [e["id"] for e in els[:20]]
-            pts["elements"] = els[:20]
-            pts["url"] = data.get("url") or ""
-        eng.set_tree(tree)
+        base_tree = existing_tree if isinstance(existing_tree, list) else eng.get_tree()
+        discovered = diff_auto_tree(base_tree, generated_tree)
         return _ok(
-            tree=tree,
+            discovered=discovered,
             elements=els,
             counts=data.get("counts") or {},
             frame_tree=data.get("frame_tree") or [],
@@ -253,7 +249,58 @@ def discover_tree(payload: dict | None = None):
             title=data.get("title"),
         )
 
-    return _run(fn, module_name)
+    return _run(fn, module_name, existing_tree)
+
+
+@router.post("/tree/import-nodes")
+def import_nodes(payload: dict | None = None):
+    """把确认后的新增节点并入功能树（只增不删，去重）。"""
+    payload = payload or {}
+    nodes = payload.get("nodes") or []
+    eng = get_engine()
+    tree = eng.get_tree()
+
+    def node_key(parent_id, node: dict) -> tuple:
+        return (parent_id, node.get("node_type"), (node.get("name") or "").strip().casefold())
+
+    existing_keys = {node_key(n.get("parent_id"), n): n.get("id") for n in tree}
+    existing_ids = {n.get("id") for n in tree}
+    id_map: dict = {}
+    for node in nodes:
+        if node.get("existing_id") in existing_ids:
+            id_map[node["id"]] = node["existing_id"]
+
+    created = 0
+    for node in nodes:
+        if node.get("existing_id") in existing_ids:
+            continue
+        parent_temp = node.get("parent_id")
+        parent_id = None
+        if parent_temp:
+            parent_id = id_map.get(parent_temp)
+            if parent_id is None and parent_temp in existing_ids:
+                parent_id = parent_temp
+        key = node_key(parent_id, node)
+        if key in existing_keys:
+            id_map[node["id"]] = existing_keys[key]
+            continue
+        fresh = new_node(
+            name=node.get("name") or "新节点",
+            node_type=node.get("node_type") or "point",
+            parent_id=parent_id,
+            url=node.get("url") or "",
+            note=node.get("note") or "",
+        )
+        for k in ("element_ids", "elements", "annotation", "status", "screenshot_id"):
+            if k in node:
+                fresh[k] = node[k]
+        eng.add_tree_node(fresh)
+        id_map[node["id"]] = fresh["id"]
+        existing_ids.add(fresh["id"])
+        existing_keys[key] = fresh["id"]
+        created += 1
+
+    return _ok(tree=eng.get_tree(), created=created)
 
 
 # ---------- 树 CRUD ----------
@@ -560,10 +607,6 @@ def load_project(pid: str, payload: dict | None = None):
     if not data:
         raise HTTPException(404, "项目不存在")
     eng = get_engine()
-    eng.set_tree(data.get("tree") or [])
-    eng.marked_elements = data.get("marked_elements") or []
-    eng.notes = data.get("notes") or []
-    eng.shots = data.get("shots") or []
 
     restored = False
     if payload.get("restore_login", True):
@@ -598,6 +641,14 @@ def load_project(pid: str, payload: dict | None = None):
                 restored = True
             except Exception as e:  # noqa: BLE001
                 data["restore_error"] = str(e)
+
+    # eng.start() 会清空 tree/marked/notes/shots，必须在启动之后恢复项目状态
+    eng.set_tree(data.get("tree") or [])
+    eng.marked_elements = data.get("marked_elements") or []
+    eng.notes = data.get("notes") or []
+    eng.shots = data.get("shots") or []
+    eng._shot_hashes = {}
+
     return {
         "ok": True,
         "project": data,

@@ -6,6 +6,7 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 
 const state = {
   elements: [],
+  selectedElementIds: new Set(),
   tree: [],
   marked: [],
   shots: [],
@@ -16,10 +17,12 @@ const state = {
   liveReady: false,
   projectCases: [],
   committedCases: [],
+  discoveryNodes: [],
   casesReady: false,
   checkedIds: new Set(),
   collapsedIds: new Set(),
 };
+let loadedProjectId = "";
 
 let liveTimer = null;
 let liveViewport = { width: 1680, height: 1050 };
@@ -74,11 +77,14 @@ $("#btn-new-project").addEventListener("click", async () => {
   const name = prompt("项目名称（按被测系统划分）", "等保2.0");
   if (!name) return;
   try {
+    if (state.projectId && loadedProjectId === state.projectId) await flushSave();
     const r = await api("/api/projects", { method: "POST", body: { name, base_url: $("#addr-url").value } });
     state.projectId = r.project.id;
+    loadedProjectId = "";
+    clearTimeout(_saveTimer);
     localStorage.setItem("qts_project_id", state.projectId);
     await loadProjectList();
-    await saveProject(true);
+    await loadProject();
     toast("项目已创建：" + name, "ok");
   } catch (e) {
     toast(e.message, "err");
@@ -86,7 +92,17 @@ $("#btn-new-project").addEventListener("click", async () => {
 });
 
 $("#project-select").addEventListener("change", async (e) => {
+  if (loadedProjectId === state.projectId) {
+    try {
+      await flushSave();
+    } catch {
+      /* ignore */
+    }
+  } else {
+    clearTimeout(_saveTimer);
+  }
   state.projectId = e.target.value;
+  loadedProjectId = "";
   localStorage.setItem("qts_project_id", state.projectId || "");
   if (state.projectId) await loadProject();
   await loadProjectList();
@@ -97,6 +113,7 @@ async function saveProject(silent = false) {
     if (!silent) toast("请先新建/选择项目", "err");
     return;
   }
+  if (loadedProjectId !== state.projectId) return;
   // 仅在「已加载或已生成/已删改用例」时写入 cases，避免空数组覆盖
   const body = { cases: state.casesReady ? state.committedCases || [] : undefined };
   return api(`/api/projects/${state.projectId}/save-from-engine`, {
@@ -115,7 +132,7 @@ async function saveProject(silent = false) {
 }
 let _saveTimer = null;
 function scheduleAutoSave(delay = 800) {
-  if (!state.projectId) return;
+  if (!state.projectId || loadedProjectId !== state.projectId) return;
   clearTimeout(_saveTimer);
   const tip = $("#autosave-tip");
   if (tip) tip.textContent = "保存中…";
@@ -139,11 +156,13 @@ async function flushSave() {
 }
 
 $("#btn-load-project").addEventListener("click", async () => {
-  // 加载前先落盘，避免防抖未写完导致旧数据回滚
-  try {
-    await flushSave();
-  } catch {
-    /* ignore */
+  clearTimeout(_saveTimer);
+  if (loadedProjectId === state.projectId) {
+    try {
+      await flushSave();
+    } catch {
+      /* ignore */
+    }
   }
   await loadProject();
 });
@@ -153,6 +172,7 @@ $("#btn-del-project").addEventListener("click", async () => {
   try {
     await api(`/api/projects/${state.projectId}`, { method: "DELETE" });
     state.projectId = "";
+    loadedProjectId = "";
     localStorage.removeItem("qts_project_id");
     await loadProjectList();
     toast("项目已删除", "ok");
@@ -181,11 +201,20 @@ function rebindCasesToTree() {
 
 async function loadProject() {
   if (!state.projectId) return toast("未选项目", "err");
+  const projectId = state.projectId;
   try {
-    const r = await api(`/api/projects/${state.projectId}/load`, {
+    const r = await api(`/api/projects/${projectId}/load`, {
       method: "POST",
       body: { restore_login: true },
     });
+    if (state.projectId !== projectId) return;
+    loadedProjectId = projectId;
+    state.selectedElementIds.clear();
+    state.elements = [];
+    state.frameTree = [];
+    state.selectedNodeId = null;
+    state.checkedIds.clear();
+    state.collapsedIds.clear();
     state.tree = r.project.tree || [];
     state.marked = r.project.marked_elements || [];
     state.shots = r.project.shots || [];
@@ -195,6 +224,7 @@ async function loadProject() {
     window._lastCases = [];
     rebindCasesToTree();
     renderTree();
+    renderElements();
     await loadMarked();
     $("#case-preview").innerHTML =
       `<div class="muted">项目已加载：已入库 ${state.committedCases.length} 条（见功能点树）。</div>`;
@@ -212,6 +242,13 @@ function setLiveVisible(on) {
   state.liveReady = !!on;
 }
 
+function clearLiveFrame() {
+  const img = $("#live-img");
+  if (img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
+  img.removeAttribute("src");
+  setLiveVisible(false);
+}
+
 function startLive() {
   stopLive();
   liveTimer = setInterval(refreshLiveFrame, 300);
@@ -225,9 +262,15 @@ function stopLive() {
 async function refreshLiveFrame() {
   try {
     const res = await fetch("/api/browser/live/frame-full", { cache: "no-store" });
-    if (!res.ok) return;
+    if (!res.ok) {
+      clearLiveFrame();
+      return;
+    }
     const blob = await res.blob();
-    if (blob.size < 100) return;
+    if (blob.size < 100) {
+      clearLiveFrame();
+      return;
+    }
     const img = $("#live-img");
     const old = img.src;
     img.src = URL.createObjectURL(blob);
@@ -236,7 +279,7 @@ async function refreshLiveFrame() {
     await loadLiveMeta(true);
     drawGhost();
   } catch {
-    /* 未启动 */
+    clearLiveFrame();
   }
 }
 
@@ -258,7 +301,7 @@ async function refreshStatus() {
     if (!c.running) {
       el.textContent = "未启动";
       el.className = "badge";
-      setLiveVisible(false);
+      clearLiveFrame();
     } else {
       el.textContent = `运行中 · ${c.title || c.url || ""}`.slice(0, 36);
       el.className = "badge ok";
@@ -281,7 +324,7 @@ $("#btn-stop").addEventListener("click", async () => {
   try {
     await api("/api/browser/close", { method: "POST", body: {} });
     stopLive();
-    setLiveVisible(false);
+    clearLiveFrame();
     state.elements = [];
     renderElements();
     drawGhost();
@@ -298,7 +341,6 @@ async function goAddress() {
   try {
     await ensureBrowser();
     startLive();
-    setLiveVisible(true);
     const r = await api("/api/browser/live/navigate", { method: "POST", body: { url } });
     // 换页清叠框
     state.elements = [];
@@ -317,6 +359,7 @@ $("#addr-url").addEventListener("keydown", (e) => {
 });
 $("#btn-back").addEventListener("click", async () => {
   try {
+    await ensureBrowser();
     await api("/api/browser/back", { method: "POST", body: {} });
     state.elements = [];
     renderElements();
@@ -328,6 +371,7 @@ $("#btn-back").addEventListener("click", async () => {
 });
 $("#btn-reload").addEventListener("click", async () => {
   try {
+    await ensureBrowser();
     await api("/api/browser/reload", { method: "POST", body: {} });
     await refreshLiveFrame();
   } catch (e) {
@@ -348,13 +392,114 @@ function stageToViewport(clientX, clientY) {
   };
 }
 
-$("#live-img").addEventListener("click", async (ev) => {
+let elementDrag = null;
+let suppressedLiveClick = null;
+
+function stagePoint(clientX, clientY) {
+  const stage = $("#live-stage");
+  const rect = stage.getBoundingClientRect();
+  return {
+    x: clientX - rect.left + stage.scrollLeft,
+    y: clientY - rect.top + stage.scrollTop,
+  };
+}
+
+function updateElementMarquee(clientX, clientY) {
+  if (!elementDrag) return;
+  const dx = clientX - elementDrag.startX;
+  const dy = clientY - elementDrag.startY;
+  if (!elementDrag.active && Math.hypot(dx, dy) > 5) {
+    elementDrag.active = true;
+    elementDrag.marquee = document.createElement("div");
+    elementDrag.marquee.className = "element-marquee";
+    $("#live-stage").appendChild(elementDrag.marquee);
+  }
+  if (!elementDrag.active) return;
+  const start = elementDrag.startPoint;
+  const end = stagePoint(clientX, clientY);
+  const box = elementDrag.marquee;
+  box.style.left = Math.min(start.x, end.x) + "px";
+  box.style.top = Math.min(start.y, end.y) + "px";
+  box.style.width = Math.abs(end.x - start.x) + "px";
+  box.style.height = Math.abs(end.y - start.y) + "px";
+}
+
+function finishElementMarquee(clientX, clientY) {
+  if (!elementDrag) return;
+  const drag = elementDrag;
+  elementDrag = null;
+  if (!drag.active) return;
+  drag.marquee.remove();
+  const dragClickTime = performance.now();
+  suppressedLiveClick = { x: clientX, y: clientY, time: dragClickTime };
+  setTimeout(() => {
+    if (suppressedLiveClick?.time === dragClickTime) suppressedLiveClick = null;
+  }, 500);
+
+  const start = stageToViewport(drag.startX, drag.startY);
+  const end = stageToViewport(clientX, clientY);
+  const left = Math.min(start.x, end.x);
+  const top = Math.min(start.y, end.y);
+  const right = Math.max(start.x, end.x);
+  const bottom = Math.max(start.y, end.y);
+  const visibleIds = new Set($$("#el-table tbody tr[data-id]").map((row) => row.dataset.id));
+  if (!drag.additive) state.selectedElementIds.clear();
+  for (const el of state.elements) {
+    const b = el.bbox;
+    if (!visibleIds.has(el.id) || !b || !b.w || !b.h) continue;
+    if (b.x <= right && b.x + b.w >= left && b.y <= bottom && b.y + b.h >= top) {
+      state.selectedElementIds.add(el.id);
+    }
+  }
+  renderElements();
+  drawGhost();
+}
+
+const liveStage = $("#live-stage");
+liveStage.addEventListener("pointerdown", (ev) => {
+  if (ev.button !== 0 || !state.liveReady || ev.target.closest("#ctx-menu, #ime-proxy")) return;
+  elementDrag = {
+    pointerId: ev.pointerId,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    startPoint: stagePoint(ev.clientX, ev.clientY),
+    additive: ev.shiftKey,
+    active: false,
+  };
+  try {
+    liveStage.setPointerCapture(ev.pointerId);
+  } catch {
+    /* ignore */
+  }
+});
+liveStage.addEventListener("pointermove", (ev) => {
+  if (elementDrag?.pointerId === ev.pointerId) updateElementMarquee(ev.clientX, ev.clientY);
+});
+liveStage.addEventListener("pointerup", (ev) => {
+  if (elementDrag?.pointerId === ev.pointerId) finishElementMarquee(ev.clientX, ev.clientY);
+});
+liveStage.addEventListener("pointercancel", (ev) => {
+  if (elementDrag?.pointerId !== ev.pointerId) return;
+  elementDrag.marquee?.remove();
+  elementDrag = null;
+});
+
+liveStage.addEventListener("click", async (ev) => {
+  if (ev.target.closest("#ctx-menu")) return;
+  if (suppressedLiveClick) {
+    const dragClick = suppressedLiveClick;
+    suppressedLiveClick = null;
+    if (performance.now() - dragClick.time < 500 && Math.hypot(ev.clientX - dragClick.x, ev.clientY - dragClick.y) < 8) {
+      ev.preventDefault();
+      return;
+    }
+  }
+  if (!state.liveReady) return;
   hideCtx();
   focusIme();
   const { x, y } = stageToViewport(ev.clientX, ev.clientY);
-
-  // Ctrl+点击识别框：切换标记
-  const rect = ev.target.closest && ev.target.closest(".shot-rect");
+  const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+  const rect = hit?.closest(".shot-rect");
   if (rect && (ev.ctrlKey || ev.metaKey)) {
     ev.preventDefault();
     const id = rect.dataset.elId;
@@ -489,7 +634,7 @@ if (ime) {
 
 // 点镜像空白（非图片）也聚焦
 $("#live-stage").addEventListener("mousedown", (ev) => {
-  if (ev.target.id === "live-stage" || ev.target.id === "live-empty") focusIme();
+  if (!elementDrag && (ev.target.id === "live-stage" || ev.target.id === "live-empty")) focusIme();
 });
 
 $("#live-stage").addEventListener(
@@ -664,11 +809,13 @@ function drawGhost() {
   ghost.innerHTML = "";
   const scale = img.clientWidth / (liveViewport.width || img.naturalWidth || 1);
   const markedIds = new Set(state.marked.map((e) => e.id));
+  const inTree = treeElementIds();
+  const inTreeKeys = treeElementKeys();
   const drawOne = (el, strong) => {
     const b = el.bbox;
     if (!b || !b.w || b.w < 2) return;
     const rect = document.createElement("div");
-    rect.className = "shot-rect" + (strong ? " strong" : "");
+    rect.className = "shot-rect" + (strong ? " strong" : "") + (state.selectedElementIds.has(el.id) ? " selected" : "");
     rect.dataset.elId = el.id;
     rect.style.left = b.x * scale + "px";
     rect.style.top = b.y * scale + "px";
@@ -678,9 +825,11 @@ function drawGhost() {
     ghost.appendChild(rect);
   };
   for (const el of state.elements) {
-    if (!markedIds.has(el.id)) drawOne(el, false);
+    if (!markedIds.has(el.id) && !inTree.has(el.id) && !(el.selector && inTreeKeys.has(elementIdentity(el)))) drawOne(el, false);
   }
-  for (const el of state.marked) drawOne(el, true);
+  for (const el of state.marked) {
+    if (!inTree.has(el.id) && !(el.selector && inTreeKeys.has(elementIdentity(el)))) drawOne(el, true);
+  }
 }
 
 $("#live-img").addEventListener("load", drawGhost);
@@ -701,13 +850,29 @@ function treeElementIds() {
   return ids;
 }
 
+function treeElementKeys() {
+  const keys = new Set();
+  const elementsById = new Map([...state.elements, ...state.marked].map((element) => [element.id, element]));
+  for (const node of state.tree) {
+    for (const element of node.elements || []) {
+      if (element.selector) keys.add(elementIdentity(element));
+    }
+    for (const id of node.element_ids || []) {
+      const element = elementsById.get(id);
+      if (element?.selector) keys.add(elementIdentity(element));
+    }
+  }
+  return keys;
+}
+
 function renderElements() {
   const tb = $("#el-table tbody");
   const q = ($("#el-filter").value || "").toLowerCase();
   const kind = $("#el-kind").value;
   const inTree = treeElementIds();
+  const inTreeKeys = treeElementKeys();
   const rows = state.elements.filter((e) => {
-    if (inTree.has(e.id)) return false; // 已入树不再列出
+    if (inTree.has(e.id) || (e.selector && inTreeKeys.has(elementIdentity(e)))) return false;
     if (kind && e.kind !== kind) return false;
     if (!q) return true;
     return `${e.name} ${e.text} ${e.selector}`.toLowerCase().includes(q);
@@ -717,11 +882,12 @@ function renderElements() {
     .map(
       (e) => `
     <tr data-id="${e.id}">
-      <td><input type="checkbox" class="el-check" data-id="${e.id}" ${e.marked ? "checked" : ""} /></td>
-      <td><span class="tag">${esc(e.kind_label || e.kind)}</span></td>
+      <td><input type="checkbox" class="el-check" data-id="${e.id}" ${state.selectedElementIds.has(e.id) ? "checked" : ""} /></td>
+      <td><select class="el-kind-select" data-id="${e.id}" title="标记类型">${kindOptions(e.kind)}</select></td>
       <td>${esc(e.name || e.text || "—")}</td>
       <td class="url">${esc(e.selector)}</td>
       <td>
+        <button class="link-btn" data-act="edit" data-id="${e.id}">编辑</button>
         <button class="link-btn" data-act="mark-as" data-id="${e.id}">标记为…</button>
         <button class="link-btn" data-act="attach" data-id="${e.id}">挂到当前</button>
       </td>
@@ -732,13 +898,38 @@ function renderElements() {
   tb.querySelectorAll("button[data-act=mark-as]").forEach((btn) => {
     btn.addEventListener("click", () => openMarkAs(btn.dataset.id));
   });
+  tb.querySelectorAll("button[data-act=edit]").forEach((btn) => {
+    btn.addEventListener("click", () => openEditElement(btn.dataset.id));
+  });
   tb.querySelectorAll("button[data-act=attach]").forEach((btn) => {
-    btn.addEventListener("click", () => markElement(btn.dataset.id));
+    btn.addEventListener("click", async () => {
+      await markElement(btn.dataset.id);
+      renderElements();
+    });
+  });
+  tb.querySelectorAll(".el-kind-select").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      const id = sel.dataset.id;
+      const idx = state.elements.findIndex((x) => x.id === id);
+      if (idx < 0) return;
+      state.elements[idx] = {
+        ...state.elements[idx],
+        kind: sel.value,
+        kind_label: classifyKindLabel(sel.value),
+      };
+      toast(`已标记为${classifyKindLabel(sel.value)}（未挂载）`, "ok");
+    });
   });
   tb.querySelectorAll(".el-check").forEach((cb) => {
     cb.addEventListener("change", () => {
-      if (cb.checked) markElement(cb.dataset.id, true);
-      else unmarkElement(cb.dataset.id, true);
+      if (cb.checked) state.selectedElementIds.add(cb.dataset.id);
+      else state.selectedElementIds.delete(cb.dataset.id);
+      const allCb = $("#el-select-all");
+      const checks = $$("#el-table .el-check");
+      const n = checks.filter((x) => state.selectedElementIds.has(x.dataset.id)).length;
+      allCb.checked = checks.length > 0 && n === checks.length;
+      allCb.indeterminate = n > 0 && n < checks.length;
+      drawGhost();
     });
   });
   tb.querySelectorAll("tr[data-id]").forEach((tr) => {
@@ -749,7 +940,7 @@ function renderElements() {
   const allCb = $("#el-select-all");
   if (allCb) {
     const visible = rows.map((r) => r.id);
-    const n = visible.filter((id) => state.elements.find((x) => x.id === id)?.marked).length;
+    const n = visible.filter((id) => state.selectedElementIds.has(id)).length;
     allCb.checked = visible.length > 0 && n === visible.length;
     allCb.indeterminate = n > 0 && n < visible.length;
   }
@@ -759,12 +950,13 @@ $("#el-filter").addEventListener("input", renderElements);
 $("#el-kind").addEventListener("change", renderElements);
 
 $("#el-select-all").addEventListener("change", (e) => {
-  $$("#el-table .el-check").forEach((cb) => {
-    cb.checked = e.target.checked;
-    if (e.target.checked) markElement(cb.dataset.id, true);
-    else unmarkElement(cb.dataset.id, true);
-  });
+  const visibleIds = $$("#el-table .el-check").map((cb) => cb.dataset.id);
+  for (const id of visibleIds) {
+    if (e.target.checked) state.selectedElementIds.add(id);
+    else state.selectedElementIds.delete(id);
+  }
   renderElements();
+  drawGhost();
 });
 $("#btn-sel-all").addEventListener("click", () => {
   $("#el-select-all").checked = true;
@@ -779,6 +971,7 @@ $("#btn-clear-elements") &&
   $("#btn-clear-elements").addEventListener("click", async () => {
     if (!confirm("确认清空「交互元素」列表？（不删除已建树节点）")) return;
     state.elements = [];
+    state.selectedElementIds.clear();
     renderElements();
     drawGhost();
     toast("交互元素已清空", "ok");
@@ -790,11 +983,44 @@ $("#btn-clear-marks2") &&
     await clearPageMarks();
   });
 
+function elementIdentity(element) {
+  const xpath = element.xpath || "";
+  const attrs = element.attrs || {};
+  const bbox = element.bbox || {};
+  const fallback = xpath ? "" : [
+    element.tag || "",
+    element.kind || "",
+    element.name || "",
+    element.text || "",
+    attrs.name || "",
+    attrs.placeholder || "",
+    attrs.type || "",
+    Math.round(bbox.x || 0),
+    Math.round(bbox.y || 0),
+  ];
+  return JSON.stringify([element.page_url || "", element.frame_path || "main", xpath || element.selector || "", fallback]);
+}
+
+function reuseElementIds(elements) {
+  const previous = new Map();
+  const markedIds = new Set(state.marked.map((element) => element.id));
+  for (const element of [...state.elements, ...state.marked]) {
+    if (element.selector) previous.set(elementIdentity(element), element);
+  }
+  return elements.map((element) => {
+    const old = element.selector && previous.get(elementIdentity(element));
+    return old
+      ? { ...element, id: old.id, marked: markedIds.has(old.id) }
+      : element;
+  });
+}
+
 $("#btn-extract").addEventListener("click", async () => {
   try {
     await ensureBrowser();
     const r = await api("/api/browser/extract", { method: "POST", body: {} });
-    state.elements = r.elements || [];
+    state.elements = reuseElementIds(r.elements || []);
+    state.selectedElementIds.clear();
     state.frameTree = r.frame_tree || [];
     renderElements();
     drawGhost();
@@ -805,16 +1031,17 @@ $("#btn-extract").addEventListener("click", async () => {
   }
 });
 
-async function markElement(elId, quiet = false) {
+async function markElement(elId, quiet = false, skipAttach = false) {
   const el = state.elements.find((x) => x.id === elId);
   if (!el) return;
   try {
     const r = await api("/api/browser/mark", { method: "POST", body: { element: el } });
     const idx = state.elements.findIndex((x) => x.id === elId);
     if (idx >= 0) state.elements[idx] = { ...state.elements[idx], ...r.element, marked: true };
+    state.selectedElementIds.delete(elId);
     await loadMarked();
     drawGhost();
-    if (state.selectedNodeId) await attachElToNode(state.selectedNodeId, r.element.id);
+    if (!skipAttach && state.selectedNodeId) await attachElToNode(state.selectedNodeId, r.element.id);
     if (!quiet) toast("已标记", "ok");
   } catch (e) {
     if (!quiet) toast(e.message, "err");
@@ -826,6 +1053,7 @@ async function unmarkElement(elId, quiet = false) {
     await api(`/api/browser/unmark/${elId}`, { method: "POST", body: {} });
     const idx = state.elements.findIndex((x) => x.id === elId);
     if (idx >= 0) state.elements[idx] = { ...state.elements[idx], marked: false };
+    state.marked = state.marked.filter((element) => element.id !== elId);
     await loadMarked();
     drawGhost();
     if (!quiet) toast("已取消");
@@ -839,9 +1067,12 @@ async function attachElToNode(nodeId, elId) {
   if (!n) return;
   const ids = new Set(n.element_ids || []);
   ids.add(elId);
+  const elements = [...(n.elements || [])];
+  const el = state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId);
+  if (el?.selector && !elements.some((item) => elementIdentity(item) === elementIdentity(el))) elements.push(el);
   await api(`/api/browser/tree/node/${nodeId}`, {
     method: "PUT",
-    body: { element_ids: Array.from(ids) },
+    body: { element_ids: Array.from(ids), elements },
   });
   await loadTree();
 }
@@ -849,7 +1080,9 @@ async function attachElToNode(nodeId, elId) {
 async function loadMarked() {
   try {
     const r = await api("/api/browser/marked");
-    const all = r.elements || [];
+    const merged = new Map(state.marked.map((element) => [element.id, element]));
+    for (const element of r.elements || []) merged.set(element.id, element);
+    const all = Array.from(merged.values());
     state.marked = all;
     // 与选中节点联动
     const n = state.tree.find((x) => x.id === state.selectedNodeId);
@@ -905,6 +1138,8 @@ function caseCountForNode(id) {
   return list.filter((c) => ids.has(c.point_id)).length;
 }
 
+let dragNodeId = null;
+
 function renderTree() {
   const byParent = {};
   for (const n of state.tree) {
@@ -950,7 +1185,7 @@ function renderTree() {
           .join("");
     const childHtml = collapsed ? "" : kids.map(nodeHtml).join("");
     return `
-      <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}" style="height:24px;min-height:24px;max-height:24px;line-height:24px;margin:0;padding:0 4px">
+      <div class="tree-node ${state.selectedNodeId === n.id ? "active" : ""}" data-id="${n.id}" draggable="true" style="height:24px;min-height:24px;max-height:24px;line-height:24px;margin:0;padding:0 4px">
         <span class="twist ${hasKids ? "" : "empty"}" data-twist="${n.id}" title="折叠/展开">${
           hasKids ? (collapsed ? "▸" : "▾") : "&nbsp;"
         }</span>
@@ -1046,19 +1281,15 @@ function renderTree() {
   $("#tree").querySelectorAll(".tree-node").forEach((el) => {
     el.addEventListener("click", (ev) => {
       if (ev.target.classList && ev.target.classList.contains("tree-check")) return;
-      const id = el.dataset.id;
       if (el.classList.contains("tree-case")) {
-        // 点用例 → 详情
-        const list = state.committedCases || [];
-        const i = list.findIndex((x) => x.id === id);
-        if (i >= 0) {
-          renderPreview({ cases: list, mode: "committed" });
-          openCaseDetail(i);
-        }
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed && (el.contains(selection.anchorNode) || el.contains(selection.focusNode))) return;
+        const c = (state.committedCases || []).find((x) => x.id === el.dataset.id);
+        if (c) openCaseDetail(c, "committed");
         return;
       }
-      selectNode(id);
-      showCasesForNode(id);
+      selectNode(el.dataset.id);
+      showCasesForNode(el.dataset.id);
     });
     if (!el.classList.contains("tree-case")) {
       el.addEventListener("dblclick", () => openNodeEditor(el.dataset.id));
@@ -1117,6 +1348,58 @@ function renderTree() {
         }
       });
     });
+  });
+
+  // 拖拽移动：把节点拖到另一节点下（或拖到树空白处移到顶层）
+  $("#tree").querySelectorAll(".tree-node:not(.tree-case):not([data-id=\"__root__\"])").forEach((el) => {
+    el.addEventListener("dragstart", (ev) => {
+      dragNodeId = el.dataset.id;
+      ev.dataTransfer.effectAllowed = "move";
+      ev.dataTransfer.setData("text/plain", dragNodeId);
+      el.classList.add("dragging");
+    });
+    el.addEventListener("dragend", () => {
+      dragNodeId = null;
+      el.classList.remove("dragging");
+      document.querySelectorAll(".tree-node.drop-target").forEach((x) => x.classList.remove("drop-target"));
+    });
+    el.addEventListener("dragover", (ev) => {
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "move";
+      document.querySelectorAll(".tree-node.drop-target").forEach((x) => x.classList.remove("drop-target"));
+      el.classList.add("drop-target");
+    });
+    el.addEventListener("drop", async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      el.classList.remove("drop-target");
+      const targetId = el.dataset.id;
+      const srcId = ev.dataTransfer.getData("text/plain") || dragNodeId;
+      if (!srcId || srcId === targetId) return;
+      if (descendantsOf(srcId).has(targetId)) return toast("不能移动到自身或子节点下", "err");
+      try {
+        await api(`/api/browser/tree/node/${srcId}`, { method: "PUT", body: { parent_id: targetId } });
+        await loadTree();
+        scheduleAutoSave();
+      } catch (e) {
+        toast(e.message, "err");
+      }
+    });
+  });
+  const treeBox = $("#tree");
+  treeBox.addEventListener("dragover", (ev) => ev.preventDefault());
+  treeBox.addEventListener("drop", async (ev) => {
+    if (ev.target.closest(".tree-node")) return;
+    ev.preventDefault();
+    const srcId = ev.dataTransfer.getData("text/plain") || dragNodeId;
+    if (!srcId) return;
+    try {
+      await api(`/api/browser/tree/node/${srcId}`, { method: "PUT", body: { parent_id: null } });
+      await loadTree();
+      scheduleAutoSave();
+    } catch (e) {
+      toast(e.message, "err");
+    }
   });
 }
 
@@ -1359,6 +1642,78 @@ function openMarkAs(elId, bulkIds) {
   $("#modal-mark-as").classList.remove("hidden");
 }
 
+function openEditElement(elId) {
+  const el = state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId);
+  if (!el) return;
+  $("#ee-id").value = el.id;
+  $("#ee-name").value = el.name || el.text || "";
+  $("#ee-kind").value = el.kind || "other";
+  $("#modal-edit-element").classList.remove("hidden");
+}
+$("#btn-close-edit-element").addEventListener("click", () => $("#modal-edit-element").classList.add("hidden"));
+$("#btn-save-edit-element").addEventListener("click", () => {
+  const id = $("#ee-id").value;
+  const idx = state.elements.findIndex((x) => x.id === id);
+  if (idx < 0) {
+    $("#modal-edit-element").classList.add("hidden");
+    return toast("元素已不在待处理列表", "err");
+  }
+  state.elements[idx] = {
+    ...state.elements[idx],
+    name: $("#ee-name").value.trim(),
+    kind: $("#ee-kind").value,
+    kind_label: classifyKindLabel($("#ee-kind").value),
+  };
+  $("#modal-edit-element").classList.add("hidden");
+  renderElements();
+  toast("已更新元素名称/类型（未挂载）", "ok");
+});
+
+function classifyKindLabel(kind) {
+  return (
+    {
+      button: "按钮",
+      input: "输入框",
+      select: "下拉框",
+      link: "链接",
+      check: "勾选/单选",
+      file: "上传",
+      other: "其他",
+    }[kind] || kind
+  );
+}
+
+const ELEMENT_KINDS = ["button", "input", "select", "link", "check", "file", "other"];
+function kindOptions(selected) {
+  return ELEMENT_KINDS.map(
+    (k) => `<option value="${k}"${k === selected ? " selected" : ""}>${classifyKindLabel(k)}</option>`
+  ).join("");
+}
+
+$("#btn-type-tree-selected").addEventListener("click", () => {
+  const ids = selectedTreeIds();
+  if (!ids.length) return toast("请勾选要修改类型的节点", "err");
+  $("#batch-type-hint").textContent = `将修改 ${ids.length} 个节点的类型`;
+  $("#modal-batch-type").classList.remove("hidden");
+});
+$("#btn-close-batch-type").addEventListener("click", () => $("#modal-batch-type").classList.add("hidden"));
+$("#btn-save-batch-type").addEventListener("click", async () => {
+  const ids = selectedTreeIds();
+  const nodeType = $("#batch-type").value;
+  if (!ids.length) return toast("没有选中节点", "err");
+  try {
+    for (const id of ids) {
+      await api(`/api/browser/tree/node/${id}`, { method: "PUT", body: { node_type: nodeType } });
+    }
+    $("#modal-batch-type").classList.add("hidden");
+    await loadTree();
+    scheduleAutoSave();
+    toast(`已修改 ${ids.length} 个节点类型`, "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+});
+
 function openNodeEditor(id) {
   const n = state.tree.find((x) => x.id === id);
   if (!n) return;
@@ -1381,7 +1736,7 @@ $("#btn-save-mark-as").addEventListener("click", async () => {
     try {
       for (const elId of bulk) {
         const el = state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId);
-        if (el && !el.marked) await markElement(elId, true);
+        if (el && !el.marked) await markElement(elId, true, true);
         const name = (el?.name || el?.text || "节点").trim() || "节点";
         await api("/api/browser/tree/node", {
           method: "POST",
@@ -1391,11 +1746,13 @@ $("#btn-save-mark-as").addEventListener("click", async () => {
             parent_id,
             url: el?.page_url || "",
             element_ids: elId ? [elId] : [],
+            elements: el?.selector ? [el] : [],
           },
         });
       }
       $("#modal-mark-as").classList.add("hidden");
       $("#modal-mark-as").dataset.bulk = "[]";
+      for (const id of bulk) state.selectedElementIds.delete(id);
       await loadTree();
       renderElements();
       drawGhost();
@@ -1410,7 +1767,7 @@ $("#btn-save-mark-as").addEventListener("click", async () => {
   const el = state.elements.find((x) => x.id === elId) || state.marked.find((x) => x.id === elId);
   const name = ($("#mka-name").value || el?.name || "节点").trim();
   try {
-    if (el && !el.marked && elId) await markElement(elId, true);
+    if (el && !el.marked && elId) await markElement(elId, true, true);
     const r = await api("/api/browser/tree/node", {
       method: "POST",
       body: {
@@ -1419,6 +1776,7 @@ $("#btn-save-mark-as").addEventListener("click", async () => {
         parent_id,
         url: el?.page_url || "",
         element_ids: elId ? [elId] : [],
+        elements: el?.selector ? [el] : [],
       },
     });
     $("#modal-mark-as").classList.add("hidden");
@@ -1586,16 +1944,160 @@ $("#btn-auto-tree").addEventListener("click", async () => {
   try {
     const r = await api("/api/browser/discover-tree", {
       method: "POST",
-      body: { module_name: "核心业务" },
+      body: { module_name: "核心业务", existing_tree: state.tree },
     });
-    state.tree = r.tree || [];
-    state.elements = r.elements || state.elements;
-    renderTree();
-    renderElements();
-    drawGhost();
-    toast(`建树完成 ${state.tree.length} 节点`, "ok");
+    state.discoveryNodes = r.discovered || [];
+    renderDiscoveryPreview();
+    $("#modal-auto-tree").classList.remove("hidden");
   } catch (e) {
     toast(e.message, "err");
+  }
+});
+
+const DISCOVERY_TYPE_LABEL = {
+  module: "模块",
+  title1: "一级",
+  title2: "二级",
+  title3: "三级",
+  point: "功能点",
+};
+const DISCOVERY_TYPES = ["module", "title1", "title2", "title3", "point"];
+
+function discoveryDescendants(id) {
+  const nodes = state.discoveryNodes || [];
+  const set = new Set([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const n of nodes) {
+      if (set.has(n.parent_id) && !set.has(n.id)) {
+        set.add(n.id);
+        changed = true;
+      }
+    }
+  }
+  return set;
+}
+
+function discoveryTypeOptions(selected) {
+  return DISCOVERY_TYPES.map(
+    (v) => `<option value="${v}"${v === selected ? " selected" : ""}>${DISCOVERY_TYPE_LABEL[v]}</option>`
+  ).join("");
+}
+
+function discoveryParentOptions(node) {
+  const exclude = discoveryDescendants(node.id);
+  const nonLeaf = new Set(["module", "title1", "title2", "title3"]);
+  const opts = [`<option value="">（顶层）</option>`];
+  const byParent = {};
+  for (const t of state.tree) {
+    (byParent[t.parent_id || ""] = byParent[t.parent_id || ""] || []).push(t);
+  }
+  const ordered = [];
+  const walk = (pid, depth) => {
+    for (const t of byParent[pid] || []) {
+      if (nonLeaf.has(t.node_type)) ordered.push({ id: t.id, name: t.name, node_type: t.node_type, depth });
+      walk(t.id, depth + 1);
+    }
+  };
+  walk("", 0);
+  for (const { id, name, node_type, depth } of ordered) {
+    const indent = "　".repeat(Math.min(depth, 6));
+    const sel = node.parent_id === id ? " selected" : "";
+    opts.push(`<option value="${id}"${sel}>${indent}${esc(name)} (${DISCOVERY_TYPE_LABEL[node_type] || node_type})</option>`);
+  }
+  for (const d of state.discoveryNodes || []) {
+    if (exclude.has(d.id) || !nonLeaf.has(d.node_type)) continue;
+    const tag = d.existing_id ? "已存在·" : "新增·";
+    const sel = node.parent_id === d.id ? " selected" : "";
+    opts.push(`<option value="${d.id}"${sel}>　${tag}${esc(d.name)} (${DISCOVERY_TYPE_LABEL[d.node_type] || d.node_type})</option>`);
+  }
+  return opts.join("");
+}
+
+function renderDiscoveryPreview() {
+  const nodes = state.discoveryNodes || [];
+  const ids = new Set(nodes.map((n) => n.id));
+  const byParent = {};
+  for (const n of nodes) {
+    const p = n.parent_id && ids.has(n.parent_id) ? n.parent_id : "";
+    (byParent[p] = byParent[p] || []).push(n);
+  }
+  function row(n, depth) {
+    const indent = depth * 18;
+    if (n.existing_id) {
+      const kids = (byParent[n.id] || []).map((c) => row(c, depth + 1)).join("");
+      return `<div class="dtree-node dtree-existing" style="padding-left:${indent}px">
+        <span class="badge-sm existing">已存在</span>
+        <span class="dtree-type-label">${DISCOVERY_TYPE_LABEL[n.node_type] || n.node_type}</span>
+        <span class="nm">${esc(n.name)}</span>
+      </div>${kids}`;
+    }
+    const kids = (byParent[n.id] || []).map((c) => row(c, depth + 1)).join("");
+    return `<div class="dtree-node dtree-new" style="padding-left:${indent}px">
+      <span class="badge-sm new">新增</span>
+      <select class="dtree-type" data-id="${n.id}">${discoveryTypeOptions(n.node_type)}</select>
+      <input class="dtree-name" data-id="${n.id}" value="${esc(n.name)}" />
+      <select class="dtree-parent" data-id="${n.id}">${discoveryParentOptions(n)}</select>
+      <button class="mini danger dtree-del" data-id="${n.id}" title="删除该新增节点及子节点">删</button>
+    </div>${kids}`;
+  }
+  const html = (byParent[""] || []).map((n) => row(n, 0)).join("");
+  $("#auto-tree-preview").innerHTML =
+    html || `<div class="muted">未发现可入库的新增节点。</div>`;
+  const existing = nodes.filter((n) => n.existing_id).length;
+  const added = nodes.length - existing;
+  $("#auto-tree-summary").textContent =
+    `发现 ${nodes.length} 个节点：新增 ${added} 个，已存在 ${existing} 个`;
+}
+
+$("#auto-tree-preview").addEventListener("input", (e) => {
+  const node = (state.discoveryNodes || []).find((n) => n.id === e.target.dataset.id);
+  if (node && e.target.classList.contains("dtree-name")) node.name = e.target.value;
+});
+$("#auto-tree-preview").addEventListener("change", (e) => {
+  const node = (state.discoveryNodes || []).find((n) => n.id === e.target.dataset.id);
+  if (!node) return;
+  if (e.target.classList.contains("dtree-type")) {
+    node.node_type = e.target.value;
+    renderDiscoveryPreview();
+  } else if (e.target.classList.contains("dtree-parent")) {
+    node.parent_id = e.target.value || null;
+  }
+});
+$("#auto-tree-preview").addEventListener("click", (e) => {
+  if (!e.target.classList.contains("dtree-del")) return;
+  const remove = discoveryDescendants(e.target.dataset.id);
+  state.discoveryNodes = (state.discoveryNodes || []).filter((n) => !remove.has(n.id));
+  renderDiscoveryPreview();
+});
+
+$("#btn-close-auto-tree").addEventListener("click", () => $("#modal-auto-tree").classList.add("hidden"));
+$("#btn-import-tree").addEventListener("click", async () => {
+  const nodes = state.discoveryNodes || [];
+  const toImport = nodes.filter((n) => !n.existing_id);
+  if (!toImport.length) return toast("没有可入库的新增节点", "err");
+  const payload = nodes.map((n) => ({
+    id: n.id,
+    name: n.name,
+    node_type: n.node_type,
+    parent_id: n.parent_id || null,
+    existing_id: n.existing_id || null,
+    element_ids: n.element_ids || [],
+    elements: n.elements || [],
+    url: n.url || "",
+    note: n.note || "",
+  }));
+  try {
+    const r = await api("/api/browser/tree/import-nodes", { method: "POST", body: { nodes: payload } });
+    state.tree = r.tree || state.tree;
+    state.discoveryNodes = [];
+    $("#modal-auto-tree").classList.add("hidden");
+    renderTree();
+    scheduleAutoSave();
+    toast(`已入库 ${r.created} 个新节点`, "ok");
+  } catch (e) {
+    toast("入库失败: " + e.message, "err");
   }
 });
 
@@ -1629,23 +2131,24 @@ $("#node-annotation").addEventListener("change", async () => {
 /* ================= 截图库 ================= */
 async function loadShotList() {
   try {
-    // 合并：项目已入库 + 当前会话临时截图
+    // 仅显示已入库截图，不显示临时/自动截图
     let shots = [];
     if (state.projectId) {
       const p = await api(`/api/projects/${state.projectId}`);
       shots = (p.project.shots || []).map((s) => ({ ...s, committed: true }));
       const dir = p.project.shots_dir || "";
-      $("#shot-dir").textContent = `截图库：${dir} · 自动截图默认开，未入库仅临时缓存`;
+      $("#shot-dir").textContent = `截图库：${dir} · 仅显示已入库截图`;
     } else {
-      $("#shot-dir").textContent = "截图库：data/output/shots · 自动截图默认开";
+      $("#shot-dir").textContent = "截图库：data/output/shots";
     }
-    try {
-      const live = await api("/api/browser/shots");
-      const tmp = (live.shots || []).filter((s) => !s.committed);
-      shots = shots.concat(tmp);
-    } catch {
-      /* ignore */
-    }
+    // 按文件去重，避免同一张截图重复显示
+    const seenFiles = new Set();
+    shots = shots.filter((s) => {
+      const key = s.file || s.path || s.id;
+      if (seenFiles.has(key)) return false;
+      seenFiles.add(key);
+      return true;
+    });
     state.shots = shots;
     $("#shot-list").innerHTML =
       shots
@@ -1696,11 +2199,25 @@ async function loadShotList() {
   }
 }
 
+let shotZoom = 1;
 function showShotDetail(s) {
-  $("#shot-detail-path").textContent = `路径：${s.path || s.file || ""}`;
-  $("#shot-detail-img").src = `/api/browser/shot-file/${encodeURIComponent(s.file || s.id + ".png")}`;
+  shotZoom = 1;
+  $("#shot-detail-path").textContent = `路径：${s.path || s.file || ""}（滚轮缩放查看）`;
+  const img = $("#shot-detail-img");
+  img.src = `/api/browser/shot-file/${encodeURIComponent(s.file || s.id + ".png")}`;
+  img.style.zoom = "1";
   $("#modal-shot").classList.remove("hidden");
 }
+$("#shot-detail-img").addEventListener(
+  "wheel",
+  (ev) => {
+    ev.preventDefault();
+    const delta = ev.deltaY > 0 ? -0.1 : 0.1;
+    shotZoom = Math.min(Math.max(shotZoom + delta, 0.3), 4);
+    $("#shot-detail-img").style.zoom = String(shotZoom);
+  },
+  { passive: false }
+);
 $("#btn-close-shot").addEventListener("click", () => $("#modal-shot").classList.add("hidden"));
 
 $("#auto-shot").addEventListener("change", async (e) => {
@@ -1757,13 +2274,15 @@ function renderPreview(r) {
       )
       .join("");
   $("#case-preview").querySelectorAll(".case-item").forEach((el) => {
-    el.addEventListener("click", () => openCaseDetail(Number(el.dataset.i)));
+    el.addEventListener("click", () => openCaseDetail(list[Number(el.dataset.i)], mode));
   });
 }
 
-function openCaseDetail(i) {
-  const c = (window._lastCases || [])[i];
+let activeCaseDetail = null;
+
+function openCaseDetail(c, mode = $("#case-preview").dataset.mode || "preview") {
   if (!c) return;
+  activeCaseDetail = { case: c, mode };
   $("#cd-id").value = c.id || "";
   $("#cd-point").value = c.point_id || "";
   if (c.point_id) state.selectedNodeId = c.point_id;
@@ -1783,33 +2302,26 @@ function openCaseDetail(i) {
   $("#cd-url").value = c.url || "";
   $("#cd-params").value = c.params || c.data || "-";
   $("#cd-remark").value = c.remark || "";
-  // 截图：临时/入库都显示
   const fname =
     c.screenshot_file ||
     (c.screenshot_path || "").split(/[\\/]/).pop() ||
     "";
-  const shotBox = $("#shot-list");
+  const previewWrap = $("#cd-shot-preview-wrap");
+  const preview = $("#cd-shot-preview");
   if (fname) {
-    const url = `/api/browser/shot-file/${encodeURIComponent(fname)}`;
-    shotBox.innerHTML =
-      `<div class="shot-item"><img src="${url}" alt="用例截图" />
-       <div class="p">${c.committed ? "" : "[临时] "}${esc(c.screenshot_path || fname)}</div></div>` +
-      (shotBox.innerHTML || "");
-    $("#shot-dir").textContent = "用例截图：" + (c.screenshot_path || fname);
+    const path = c.screenshot_path || fname;
+    preview.src = `/api/browser/shot-file/${encodeURIComponent(fname)}`;
+    preview.onclick = () => showShotDetail({ path, file: fname });
+    preview.onerror = () => previewWrap.classList.add("hidden");
+    $("#cd-shot-path").textContent = path;
+    previewWrap.classList.remove("hidden");
   } else {
-    $("#shot-dir").textContent =
-      "当前无关联截图。自动截图开启后操作页面会生成，入库后写入截图库。";
+    preview.removeAttribute("src");
+    preview.onclick = null;
+    preview.onerror = null;
+    previewWrap.classList.add("hidden");
   }
-  loadShotList().then(() => {
-    if (fname) {
-      const url = `/api/browser/shot-file/${encodeURIComponent(fname)}`;
-      $("#shot-list").insertAdjacentHTML(
-        "afterbegin",
-        `<div class="shot-item"><img src="${url}" alt="用例截图" />
-         <div class="p">[用例关联] ${esc(c.screenshot_path || fname)}</div></div>`
-      );
-    }
-  });
+  loadShotList();
   const n = state.tree.find((x) => x.id === c.point_id);
   if (n) {
     $("#node-annotation").value = n.annotation || "";
@@ -1873,10 +2385,10 @@ $("#btn-ai-generate") &&
   });
 
 $("#btn-save-case") &&
-  $("#btn-save-case").addEventListener("click", () => {
-    const i = (window._lastCases || []).findIndex((x) => x.id === $("#cd-id").value);
-    if (i < 0) return;
-    const c = window._lastCases[i];
+  $("#btn-save-case").addEventListener("click", async () => {
+    const detail = activeCaseDetail;
+    const c = detail && detail.case;
+    if (!c) return;
     Object.assign(c, {
       case_no: $("#cd-no").value,
       case_status: $("#cd-status").value,
@@ -1896,9 +2408,21 @@ $("#btn-save-case") &&
       remark: $("#cd-remark").value,
       human_modified: true,
     });
-    renderPreview({ cases: window._lastCases });
     $("#modal-case").classList.add("hidden");
-    toast("用例已更新（导出前请再点「生成入库」或直接导出当前会话）");
+    if (detail.mode === "committed") {
+      state.casesReady = true;
+      state.projectCases = state.committedCases;
+      renderTree();
+      try {
+        await saveProject(true);
+        toast("已保存已入库用例", "ok");
+      } catch (e) {
+        toast("保存用例失败: " + e.message, "err");
+      }
+      return;
+    }
+    renderPreview({ cases: window._lastCases, mode: detail.mode || "preview" });
+    toast("用例已更新（当前为未入库预览）");
   });
 
 /* 用例操作 */
@@ -2034,19 +2558,6 @@ function initCollapsible() {
     });
   });
 }
-
-/* init */
-refreshStatus();
-loadProjectList();
-loadMarked();
-loadTree();
-loadShotList();
-startLive();
-loadLiveMeta();
-initSplitters();
-initPopout();
-initZoom();
-initCollapsible();
 
 /* ================= 配置 ================= */
 $("#btn-config").addEventListener("click", async () => {
@@ -2304,18 +2815,55 @@ function initPopout() {
   });
 }
 
+/* ================= 模态框拖动 ================= */
+function makeModalDraggable(box) {
+  const handle = box.querySelector("h3");
+  if (!handle) return;
+  handle.style.cursor = "move";
+  handle.style.userSelect = "none";
+  handle.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0 || ev.target.closest("button, input, select, textarea")) return;
+    ev.preventDefault();
+    const rect = box.getBoundingClientRect();
+    const startX = ev.clientX;
+    const startY = ev.clientY;
+    const origLeft = rect.left;
+    const origTop = rect.top;
+    box.style.position = "fixed";
+    box.style.left = origLeft + "px";
+    box.style.top = origTop + "px";
+    box.style.margin = "0";
+    const move = (e) => {
+      box.style.left = Math.max(0, origLeft + (e.clientX - startX)) + "px";
+      box.style.top = Math.max(0, origTop + (e.clientY - startY)) + "px";
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+function initModalDrag() {
+  document.querySelectorAll(".modal-box").forEach(makeModalDraggable);
+}
+
 /* ================= 镜像缩放 ================= */
 let liveZoom = 1;
 function applyZoom() {
   const img = $("#live-img");
   if (!img) return;
   const frame = $("#live-frame");
-  // zoom 不改布局流，配合 overflow 避免黑框
   if (frame) {
-    frame.style.zoom = String(liveZoom);
+    frame.style.removeProperty("zoom");
+    frame.style.setProperty("width", `${liveZoom * 100}%`, "important");
+    frame.style.setProperty("max-width", "none", "important");
   }
-  img.style.width = "100%";
-  img.style.zoom = String(liveZoom);
+  img.style.removeProperty("zoom");
+  img.style.setProperty("width", "100%", "important");
+  img.style.setProperty("max-height", "none", "important");
+  img.style.setProperty("height", "auto", "important");
   const box = $("#zoom-label");
   if (box) {
     if (document.activeElement !== box) {
@@ -2362,16 +2910,23 @@ function initZoom() {
 }
 
 /* init */
-refreshStatus();
-loadProjectList();
-loadMarked();
-loadTree();
-loadShotList();
-startLive();
-loadLiveMeta();
 initSplitters();
 initPopout();
 initZoom();
+initCollapsible();
+initModalDrag();
+
+async function initializeWorkspace() {
+  await loadProjectList();
+  if (state.projectId) await loadProject();
+  else await loadTree();
+  await loadMarked();
+  await loadShotList();
+  refreshStatus();
+  startLive();
+  loadLiveMeta();
+}
+initializeWorkspace();
 
 $("#btn-max-browser") &&
   $("#btn-max-browser").addEventListener("click", () => {
@@ -2382,13 +2937,12 @@ $("#btn-max-browser") &&
     if (!minned) {
       el.classList.add("is-min");
       cap.classList.add("is-min");
-      brow.style.flex = "1 1 auto";
-      brow.style.minHeight = "calc(100vh - 160px)";
+      brow.classList.add("is-max");
       toast("浏览器已最大化");
     } else {
       el.classList.remove("is-min");
       cap.classList.remove("is-min");
-      brow.style.minHeight = "200px";
+      brow.classList.remove("is-max");
       toast("已恢复下方面板");
     }
     window.dispatchEvent(new Event("resize"));

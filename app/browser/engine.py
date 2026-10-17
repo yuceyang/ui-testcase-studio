@@ -49,6 +49,7 @@ class BrowserEngine:
         self.tree: list[dict] = []
         self.notes: list[dict] = []
         self._pending_storage_tokens: list[str] = []
+        self._shot_hashes: dict[str, dict] = {}
 
         # 专用 Playwright 线程（先建 thread.local，再启动线程）
         self._local = threading.local()
@@ -127,10 +128,6 @@ class BrowserEngine:
             self._context.set_default_timeout(20000)
             self._page = self._context.new_page()
             self.session_id = uuid.uuid4().hex[:12]
-            self.shots = []
-            self.marked_elements = []
-            self.tree = []
-            self.notes = []
             self._pending_storage_tokens = []
             return {"session_id": self.session_id, "headless": self.headless}
 
@@ -455,6 +452,24 @@ class BrowserEngine:
             page.screenshot(path=str(path), full_page=False, type="png")
         except Exception as e:  # noqa: BLE001
             raise BrowserError(f"截图失败: {e}") from e
+
+        # 自动截图按内容去重：与已有截图完全相同则复用，避免重复堆积
+        digest = None
+        if tag == "auto":
+            import hashlib
+
+            try:
+                digest = hashlib.md5(path.read_bytes()).hexdigest()
+            except OSError:
+                digest = None
+            existing = self._shot_hashes.get(digest) if digest else None
+            if existing:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+                return existing
+
         rec = {
             "id": sid,
             "tag": tag,
@@ -466,6 +481,8 @@ class BrowserEngine:
             "committed": False,
         }
         self.shots.append(rec)
+        if digest:
+            self._shot_hashes[digest] = rec
         self.last_shot_id = sid
         return rec
 
@@ -487,7 +504,6 @@ class BrowserEngine:
                     shutil.copy2(src, dst)
                 except OSError:
                     dst = src
-                s = dict(s)
                 s["path"] = str(dst)
                 s["committed"] = True
                 out.append(s)
@@ -508,6 +524,9 @@ class BrowserEngine:
             target = next((s for s in self.shots if s["id"] == sid), None)
             self.shots = [s for s in self.shots if s["id"] != sid]
         if target:
+            self._shot_hashes = {
+                digest: rec for digest, rec in self._shot_hashes.items() if rec.get("id") != sid
+            }
             try:
                 p = Path(target.get("path") or "")
                 if p.is_file():

@@ -121,36 +121,33 @@ EXTRACT_JS = r"""
     } catch (e) {}
   }
 
-  // 导航/菜单树线索（支持 Element-UI 层级：模块 → 一级）
+  // 导航/菜单树线索（递归爬取：模块 → 一级 → 二级 → 三级）
   const navHints = [];
   const navRoots = document.querySelectorAll(
     'nav, .menu, .sidebar, .el-menu, .ant-menu, [class*=menu], [class*=nav], [class*=sidebar], [role=navigation]'
   );
   let menuIdx = 0;
+  const crawlLi = (li, level, parentId) => {
+    if (level > 3 || navHints.length >= 80) return;
+    const text = (li.querySelector(':scope > .el-sub-menu__title, :scope > a, :scope > span, :scope > div')?.innerText || li.innerText || '')
+      .trim().replace(/\\s+/g, ' ').slice(0, 40);
+    const href = (li.querySelector('a') && li.querySelector('a').getAttribute('href')) || '';
+    const isSub = li.classList.contains('el-sub-menu') || !!li.querySelector('ul') || li.getAttribute('aria-haspopup') === 'true';
+    const id = 'm' + (menuIdx++);
+    navHints.push({ text, href, tag: li.tagName.toLowerCase(), level, id, parent: parentId || '', isSub });
+    if (isSub) {
+      const directSubs = li.querySelectorAll(':scope > ul > li');
+      const subs = directSubs.length ? directSubs : li.querySelectorAll('ul > li');
+      for (const sub of Array.from(subs).slice(0, 30)) {
+        crawlLi(sub, level + 1, id);
+      }
+    }
+  };
   for (const root of Array.from(navRoots).slice(0, 4)) {
-    // 顶层：sub-menu 标题或直接 menu-item
     const topItems = root.querySelectorAll(':scope > ul > li, :scope > li, .el-menu > li');
     const tops = topItems.length ? topItems : root.querySelectorAll('li');
     for (const li of Array.from(tops).slice(0, 30)) {
-      const text = (li.querySelector(':scope > .el-sub-menu__title, :scope > a, :scope > span, :scope > div')?.innerText || li.innerText || '')
-        .trim().replace(/\\s+/g, ' ').slice(0, 40);
-      const href = (li.querySelector('a') && li.querySelector('a').getAttribute('href')) || '';
-      const isSub = li.classList.contains('el-sub-menu') || !!li.querySelector(':scope > ul');
-      const id = 'm' + (menuIdx++);
-      navHints.push({ text, href, tag: li.tagName.toLowerCase(), level: 0, id, isSub });
-
-      if (isSub) {
-        const subs = li.querySelectorAll(':scope > ul > li');
-        for (const sub of Array.from(subs).slice(0, 20)) {
-          const st = (sub.innerText || '').trim().replace(/\\s+/g, ' ').slice(0, 40);
-          const sh = (sub.querySelector('a') && sub.querySelector('a').getAttribute('href')) || '';
-          if (!st && !sh) continue;
-          navHints.push({
-            text: st, href: sh, tag: sub.tagName.toLowerCase(),
-            level: 1, parent: id, module_ref: id,
-          });
-        }
-      }
+      crawlLi(li, 0, '');
     }
     if (navHints.length) break;
   }

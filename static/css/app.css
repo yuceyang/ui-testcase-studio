@@ -301,7 +301,7 @@ textarea { resize: vertical; font-family: inherit; }
   overflow: auto;
 }
 .modal-box.wide { width: min(720px, 100%); }
-.modal-box h3 { margin: 0 0 14px; font-size: 16px; }
+.modal-box h3 { margin: 0 0 14px; font-size: 16px; cursor: move; user-select: none; }
 
 /* toast */
 .toast {

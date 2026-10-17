@@ -320,17 +320,46 @@
 }
 .popout-browser.hidden { display: none; }
 .popout-bar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: #f1f5f9;
-  border-bottom: 1px solid var(--line);
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px 14px;
+  color: #f8fafc;
+  background: #172338;
+  border-bottom: 1px solid #334155;
   cursor: move;
   user-select: none;
   flex: 0 0 auto;
 }
-.popout-bar b { margin-right: auto; }
+.popout-bar b {
+  margin-right: 4px;
+  font-size: 15px;
+}
+.popout-bar .muted {
+  color: #cbd5e1;
+}
+.popout-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.popout-actions .btn {
+  min-height: 40px;
+  font-weight: 600;
+}
+.popout-actions .btn.danger {
+  color: #fff;
+  border-color: #dc2626;
+  background: #dc2626;
+}
+.popout-actions .btn.danger:hover {
+  border-color: #b91c1c;
+  background: #b91c1c;
+}
 .popout-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -517,6 +546,81 @@
   background: rgba(245, 158, 11, .28);
   z-index: 2;
 }
+.shot-rect.selected {
+  border: 2px solid #f59e0b;
+  background: rgba(245, 158, 11, .24);
+  z-index: 3;
+}
+.element-marquee {
+  position: absolute;
+  z-index: 6;
+  border: 1px dashed #2563eb;
+  background: rgba(37, 99, 235, .14);
+  pointer-events: none;
+}
+
+.auto-tree-preview {
+  max-height: 56vh;
+  overflow: auto;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #fafbfc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.dtree-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+.dtree-node.dtree-existing {
+  background: #eef2ff;
+  color: var(--muted);
+}
+.dtree-node.dtree-new {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+}
+.badge-sm {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #e5e7eb;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.badge-sm.existing {
+  background: #c7d2fe;
+  color: #312e81;
+  flex-shrink: 0;
+}
+.badge-sm.new {
+  background: #2563eb;
+  color: #fff;
+  flex-shrink: 0;
+}
+.dtree-type-label {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.dtree-type,
+.dtree-parent {
+  width: auto;
+  min-width: 90px;
+}
+.dtree-name {
+  flex: 1;
+  min-width: 120px;
+}
+.dtree-del {
+  flex-shrink: 0;
+}
 
 .ctx-menu {
   position: absolute;
@@ -575,6 +679,23 @@
   flex: 1;
   word-break: break-all;
   color: var(--muted);
+}
+.case-shot-preview-wrap {
+  margin: 8px 0;
+}
+.case-shot-preview {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0f172a;
+  cursor: zoom-in;
+}
+.case-shot-preview-wrap .muted {
+  margin-top: 4px;
+  word-break: break-all;
 }
 
 .el-table-wrap {
@@ -667,6 +788,11 @@
   gap: 6px;
   user-select: none;
 }
+.tree-case .nm {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
 .tree-check {
   width: 14px;
   height: 14px;
@@ -683,6 +809,8 @@
 }
 .tree-node:hover { background: #f3f4f6; }
 .tree-node.active { background: #e0e9ff; }
+.tree-node.dragging { opacity: .5; }
+.tree-node.drop-target { background: #dbeafe; outline: 2px dashed #2563eb; outline-offset: -2px; }
 .tree-node .badge-sm {
   font-size: 10px;
   padding: 1px 6px;
@@ -742,7 +870,7 @@
   height: auto;
   cursor: crosshair;
 }
-.shot-overlay {
+.shot-stage .shot-overlay {
   position: absolute;
   left: 0;
   top: 0;
@@ -750,7 +878,7 @@
   height: 100%;
   pointer-events: none;
 }
-.shot-rect {
+.shot-stage .shot-rect {
   position: absolute;
   border: 1.5px solid rgba(59, 130, 246, .55);
   background: rgba(59, 130, 246, .08);
@@ -769,6 +897,16 @@
 .el-table-wrap { flex: 1; overflow: auto; max-height: min(360px, 40vh); }
 .filters { display: flex; gap: 8px; padding: 8px 12px; flex-wrap: wrap; }
 .filters input, .filters select { width: auto; min-width: 140px; }
+.el-kind-select {
+  width: auto;
+  min-width: 92px;
+  padding: 2px 4px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
 
 /* 已标记 */
 .marked-list {
@@ -1710,6 +1848,9 @@ html, body {
   max-width: 100% !important;
   border: none !important;
 }
+#live-frame.hidden {
+  display: none !important;
+}
 
 /* 下方面板：高度由拖拽/内容决定，页面被撑长 */
 #elements-panel, #cases-panel {
@@ -1759,4 +1900,11 @@ html, body {
 }
 .live-stage {
   overflow: auto !important;
+}
+#browser-col.is-max {
+  flex: 1 1 auto !important;
+  height: calc(100vh - 160px) !important;
+  min-height: calc(100vh - 160px) !important;
+  max-height: none !important;
+  overflow: hidden !important;
 }

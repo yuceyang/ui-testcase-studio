@@ -54,6 +54,7 @@
               </div>
             </div>
             <button id="btn-move-tree-selected" class="mini">批量移动</button>
+            <button id="btn-type-tree-selected" class="mini">批量改类型</button>
             <button id="btn-del-tree-selected" class="mini danger">批量删除</button>
             <button class="mini collapse-toggle" data-collapse="tree-body">折叠</button>
           </div>
@@ -184,9 +185,9 @@
     <div class="popout-bar" id="popout-bar">
       <b>浏览器操作区</b>
       <span class="muted">可拖动标题栏 / 右下角缩放</span>
-      <div>
-        <button class="mini" id="btn-popout-dock">收回</button>
-        <button class="mini" id="btn-popout-close">关闭</button>
+      <div class="popout-actions">
+        <button class="btn primary" id="btn-popout-dock">⤺ 收回到主界面</button>
+        <button class="btn danger" id="btn-popout-close">关闭弹出窗口</button>
       </div>
     </div>
     <div class="popout-body" id="popout-body"></div>
@@ -200,6 +201,30 @@
       <div class="muted" id="shot-detail-path">路径：—</div>
       <img id="shot-detail-img" alt="截图" style="width:100%;max-height:70vh;object-fit:contain;background:#111" />
       <div class="actions"><button id="btn-close-shot" class="btn ghost">关闭</button></div>
+    </div>
+  </div>
+
+  <!-- 编辑元素（只改名/类型，不挂载） -->
+  <div id="modal-edit-element" class="modal hidden">
+    <div class="modal-box">
+      <h3>编辑交互元素</h3>
+      <input type="hidden" id="ee-id" />
+      <label class="field"><span>名称</span><input id="ee-name" /></label>
+      <label class="field"><span>类型</span>
+        <select id="ee-kind">
+          <option value="button">按钮</option>
+          <option value="input">输入框</option>
+          <option value="select">下拉框</option>
+          <option value="link">链接</option>
+          <option value="check">勾选/单选</option>
+          <option value="file">上传</option>
+          <option value="other">其他</option>
+        </select>
+      </label>
+      <div class="actions">
+        <button id="btn-save-edit-element" class="btn primary">保存</button>
+        <button id="btn-close-edit-element" class="btn ghost">取消</button>
+      </div>
     </div>
   </div>
 
@@ -252,6 +277,40 @@
     </div>
   </div>
 
+  <!-- 自动建树预览 -->
+  <div id="modal-auto-tree" class="modal hidden">
+    <div class="modal-box wide">
+      <h3>自动建树预览</h3>
+      <div class="muted" id="auto-tree-summary"></div>
+      <div id="auto-tree-preview" class="auto-tree-preview"></div>
+      <div class="actions">
+        <button id="btn-import-tree" class="btn primary">确认入库</button>
+        <button id="btn-close-auto-tree" class="btn ghost">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 批量改类型 -->
+  <div id="modal-batch-type" class="modal hidden">
+    <div class="modal-box">
+      <h3>批量修改节点类型</h3>
+      <div class="muted" id="batch-type-hint"></div>
+      <label class="field"><span>类型</span>
+        <select id="batch-type">
+          <option value="module">模块</option>
+          <option value="title1">一级标题</option>
+          <option value="title2">二级标题</option>
+          <option value="title3">三级标题</option>
+          <option value="point">功能点</option>
+        </select>
+      </label>
+      <div class="actions">
+        <button id="btn-save-batch-type" class="btn primary">确定</button>
+        <button id="btn-close-batch-type" class="btn ghost">取消</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 批量移动 -->
   <div id="modal-move" class="modal hidden">
     <div class="modal-box">
@@ -296,7 +355,7 @@
       <label class="field"><span>携带参数</span><input id="cd-params" /></label>
       <label class="field"><span>备注 / 优先级</span><input id="cd-remark" /></label>
 
-      <!-- 单项功能点：判定 / 标记 / 截图库 -->
+      <!-- 单项用例：判定 / 截图库 -->
       <div class="subsec">
         <b>判定</b>
         <div class="actions">
@@ -308,12 +367,11 @@
         <label class="field"><span>问题标注</span><textarea id="node-annotation" rows="2"></textarea></label>
       </div>
       <div class="subsec">
-        <b>标记</b>
-        <button class="btn" id="btn-clear-marks">一键取消本页标记</button>
-        <div class="muted">Ctrl+点识别框切换 · 右键识别框标记/取消</div>
-      </div>
-      <div class="subsec">
         <b>截图库</b>
+        <div id="cd-shot-preview-wrap" class="case-shot-preview-wrap hidden">
+          <img id="cd-shot-preview" class="case-shot-preview" alt="用例截图预览" />
+          <div id="cd-shot-path" class="muted"></div>
+        </div>
         <div class="muted" id="shot-dir">存储目录：—</div>
         <div id="shot-list" class="shot-list"></div>
       </div>
